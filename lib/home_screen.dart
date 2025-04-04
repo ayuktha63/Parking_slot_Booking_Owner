@@ -141,24 +141,49 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 if (calculatedAmount != null)
                   TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => SuccessScreen(
-                            receipt: {
-                              'slot_number': slot['slot_number'],
-                              'vehicle_number': booking['number_plate'],
-                              'entry_time': booking['entry_time'],
-                              'exit_time': exitTime.toIso8601String(),
-                              'date': exitTime.toIso8601String().split('T')[0],
-                              'parking_name': widget.parkingAreaName,
-                              'amount': calculatedAmount,
-                            },
-                          ),
-                        ),
-                      ).then((_) => _fetchSlots());
+                    onPressed: () async {
+                      try {
+                        // Complete the booking and free the slot
+                        final completeResponse = await http.post(
+                          Uri.parse(
+                              'http://localhost:4000/api/owner/bookings/complete'),
+                          headers: {'Content-Type': 'application/json'},
+                          body: jsonEncode({
+                            'slot_id': slot['_id'],
+                            'parking_id': slot['parking_id'],
+                            'vehicle_type': _vehicleType,
+                            'exit_time': exitTime.toIso8601String(),
+                            'amount': calculatedAmount,
+                          }),
+                        );
+
+                        if (completeResponse.statusCode == 200) {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => SuccessScreen(
+                                receipt: {
+                                  'slot_number': slot['slot_number'],
+                                  'vehicle_number': booking['number_plate'],
+                                  'entry_time': booking['entry_time'],
+                                  'exit_time': exitTime.toIso8601String(),
+                                  'date':
+                                      exitTime.toIso8601String().split('T')[0],
+                                  'parking_name': widget.parkingAreaName,
+                                  'amount': calculatedAmount,
+                                },
+                              ),
+                            ),
+                          ).then((_) => _fetchSlots());
+                        } else {
+                          _showErrorDialog(
+                              'Failed to complete booking: ${completeResponse.body}');
+                        }
+                      } catch (e) {
+                        print('Error completing booking: $e');
+                        _showErrorDialog('Error completing booking: $e');
+                      }
                     },
                     child: const Text('Pay',
                         style: TextStyle(color: Color(0xFF3F51B5))),
