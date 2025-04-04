@@ -16,6 +16,7 @@ class ParkingAreaOwnerApp extends StatelessWidget {
       title: 'Parking Area Owner App',
       theme: ThemeData(primarySwatch: Colors.blue),
       home: const LoadingScreen(), // Start with LoadingScreen
+      debugShowCheckedModeBanner: false, // Add this line to remove debug banner
     );
   }
 }
