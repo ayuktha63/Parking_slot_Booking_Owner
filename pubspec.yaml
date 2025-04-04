@@ -20,3 +20,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/lottie/success.json
+    - assets/lottie/main_car.json

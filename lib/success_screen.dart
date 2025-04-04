@@ -8,6 +8,9 @@ class SuccessScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Determine if this is a payment or booking success based on presence of 'amount'
+    final isPayment = receipt['amount'] != null;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       body: SingleChildScrollView(
@@ -26,9 +29,9 @@ class SuccessScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Text(
-                    "Booking Confirmed!",
-                    style: TextStyle(
+                  Text(
+                    isPayment ? "Payment Successful!" : "Booking Confirmed!",
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
@@ -36,7 +39,9 @@ class SuccessScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "Your parking slot is reserved",
+                    isPayment
+                        ? "Your payment has been processed"
+                        : "Your parking slot is reserved",
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.85),
                       fontSize: 14,
@@ -74,7 +79,8 @@ class SuccessScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildSectionTitle("Booking Details"),
+                        _buildSectionTitle(
+                            isPayment ? "Payment Receipt" : "Booking Details"),
                         const SizedBox(height: 16),
                         _buildDetailRow(Icons.local_parking, "Slot",
                             "${receipt['slot_number']}"),
@@ -84,6 +90,26 @@ class SuccessScreen extends StatelessWidget {
                         const SizedBox(height: 12),
                         _buildDetailRow(Icons.access_time, "Entry Time",
                             "${receipt['entry_time']}"),
+                        if (receipt['exit_time'] != null) ...[
+                          const SizedBox(height: 12),
+                          _buildDetailRow(Icons.access_time, "Exit Time",
+                              "${receipt['exit_time']}"),
+                        ],
+                        if (receipt['date'] != null) ...[
+                          const SizedBox(height: 12),
+                          _buildDetailRow(Icons.calendar_today, "Date",
+                              "${receipt['date']}"),
+                        ],
+                        if (receipt['parking_name'] != null) ...[
+                          const SizedBox(height: 12),
+                          _buildDetailRow(Icons.local_parking, "Parking Name",
+                              "${receipt['parking_name']}"),
+                        ],
+                        if (receipt['amount'] != null) ...[
+                          const SizedBox(height: 12),
+                          _buildDetailRow(Icons.money, "Amount Paid",
+                              "₹${receipt['amount']}"),
+                        ],
                       ],
                     ),
                   ),
@@ -101,7 +127,9 @@ class SuccessScreen extends StatelessWidget {
                       child: const Text(
                         "Back to Home",
                         style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white),
                       ),
                     ),
                   ),

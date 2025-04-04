@@ -97,34 +97,79 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
       if (booking != null) {
+        int? calculatedAmount;
+        DateTime exitTime = DateTime.now();
+
         showDialog(
           context: context,
-          builder: (context) => AlertDialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: Row(
-              children: const [
-                Icon(Icons.info_outline, color: Color(0xFF3F51B5)),
-                SizedBox(width: 8),
-                Text("Slot Details"),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Phone: ${booking['phone']}'),
-                Text('Vehicle Number: ${booking['number_plate']}'),
-                Text('Entry Time: ${booking['entry_time']}'),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Close',
-                    style: TextStyle(color: Color(0xFF3F51B5))),
+          builder: (context) => StatefulBuilder(
+            builder: (context, setStateDialog) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: const [
+                  Icon(Icons.info_outline, color: Color(0xFF3F51B5)),
+                  SizedBox(width: 8),
+                  Text("Slot Details"),
+                ],
               ),
-            ],
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Phone: ${booking['phone']}'),
+                  Text('Vehicle Number: ${booking['number_plate']}'),
+                  Text('Entry Time: ${booking['entry_time']}'),
+                  if (calculatedAmount != null)
+                    Text('Amount: ₹$calculatedAmount'),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    DateTime entryTime = DateTime.parse(booking['entry_time']);
+                    exitTime = DateTime.now();
+                    int secondsDifference =
+                        exitTime.difference(entryTime).inSeconds;
+                    setStateDialog(() {
+                      calculatedAmount =
+                          secondsDifference; // 1 rupee per second
+                    });
+                  },
+                  child: const Text('Calculate Now',
+                      style: TextStyle(color: Color(0xFF3F51B5))),
+                ),
+                if (calculatedAmount != null)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => SuccessScreen(
+                            receipt: {
+                              'slot_number': slot['slot_number'],
+                              'vehicle_number': booking['number_plate'],
+                              'entry_time': booking['entry_time'],
+                              'exit_time': exitTime.toIso8601String(),
+                              'date': exitTime.toIso8601String().split('T')[0],
+                              'parking_name': widget.parkingAreaName,
+                              'amount': calculatedAmount,
+                            },
+                          ),
+                        ),
+                      ).then((_) => _fetchSlots());
+                    },
+                    child: const Text('Pay',
+                        style: TextStyle(color: Color(0xFF3F51B5))),
+                  ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close',
+                      style: TextStyle(color: Color(0xFF3F51B5))),
+                ),
+              ],
+            ),
           ),
         );
       }
