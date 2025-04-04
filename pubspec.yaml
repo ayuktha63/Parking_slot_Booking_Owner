@@ -1,0 +1,22 @@
+name: parking_area_owner_app
+description: A Flutter app for parking area owners
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.2
+  google_fonts: ^6.2.1
+  lottie: ^3.1.2 # For success animation
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/lottie/success.json
