@@ -66,7 +66,9 @@ app.post('/api/owner/login', async (req, res) => {
 
     try {
         console.log(`Logging in owner with phone: ${phone}`);
-        const user = await db.collection('register_login').findOne({ phone, password });
+        const user = password
+            ? await db.collection('register_login').findOne({ phone, password })
+            : await db.collection('register_login').findOne({ phone }); // Allow fetching without password for profile
         if (!user) {
             console.log(`Invalid credentials for phone: ${phone}`);
             return res.status(400).json({ message: "Invalid credentials" });
@@ -85,11 +87,11 @@ app.post('/api/owner/login', async (req, res) => {
 
 // Update or Create Parking Area
 app.post('/api/owner/parking_areas', async (req, res) => {
-    const { name, location, total_car_slots, total_bike_slots } = req.body;
+    const { name, parking_area_name, location, total_car_slots, total_bike_slots } = req.body;
     const db = await dbPromise;
 
     try {
-        console.log("Processing parking area with data:", { name, location, total_car_slots, total_bike_slots });
+        console.log("Processing parking area with data:", { name, parking_area_name, location, total_car_slots, total_bike_slots });
         const existingArea = await db.collection('parking_areas').findOne({ name });
 
         if (existingArea) {
@@ -116,6 +118,12 @@ app.post('/api/owner/parking_areas', async (req, res) => {
                 }
             );
 
+            // Update parking_area_name in register_login
+            await db.collection('register_login').updateOne(
+                { phone: name },
+                { $set: { parking_area_name, updatedAt: new Date() } }
+            );
+
             console.log(`Parking area ${name} updated: ${updateResult.modifiedCount} document(s) modified`);
 
             // Adjust slots if total slots increased or decreased
@@ -129,7 +137,6 @@ app.post('/api/owner/parking_areas', async (req, res) => {
 
                 // Handle car slots
                 if (carSlotsDiff > 0) {
-                    // Add new car slots
                     const newCarSlots = Array.from({ length: carSlotsDiff }, (_, i) => ({
                         parking_id: parkingId,
                         slot_number: currentCarSlots + i + 1,
@@ -140,7 +147,6 @@ app.post('/api/owner/parking_areas', async (req, res) => {
                     await db.collection('slots').insertMany(newCarSlots);
                     console.log(`Added ${carSlotsDiff} new car slots`);
                 } else if (carSlotsDiff < 0) {
-                    // Remove excess car slots (only if available)
                     const slotsToRemove = carSlots
                         .filter(slot => slot.status === "available")
                         .slice(0, -carSlotsDiff);
@@ -154,7 +160,6 @@ app.post('/api/owner/parking_areas', async (req, res) => {
 
                 // Handle bike slots
                 if (bikeSlotsDiff > 0) {
-                    // Add new bike slots
                     const newBikeSlots = Array.from({ length: bikeSlotsDiff }, (_, i) => ({
                         parking_id: parkingId,
                         slot_number: currentBikeSlots + i + 1,
@@ -165,7 +170,6 @@ app.post('/api/owner/parking_areas', async (req, res) => {
                     await db.collection('slots').insertMany(newBikeSlots);
                     console.log(`Added ${bikeSlotsDiff} new bike slots`);
                 } else if (bikeSlotsDiff < 0) {
-                    // Remove excess bike slots (only if available)
                     const slotsToRemove = bikeSlots
                         .filter(slot => slot.status === "available")
                         .slice(0, -bikeSlotsDiff);
@@ -182,7 +186,7 @@ app.post('/api/owner/parking_areas', async (req, res) => {
         } else {
             // Create new parking area
             const parkingArea = {
-                name,
+                name, // Use phone as name
                 location: { lat: location.lat, lng: location.lng },
                 total_car_slots,
                 available_car_slots: total_car_slots,
@@ -193,6 +197,13 @@ app.post('/api/owner/parking_areas', async (req, res) => {
                 createdAt: new Date(),
             };
             const result = await db.collection('parking_areas').insertOne(parkingArea);
+
+            // Update parking_area_name in register_login
+            await db.collection('register_login').updateOne(
+                { phone: name },
+                { $set: { parking_area_name, updatedAt: new Date() } }
+            );
+
             console.log(`Parking area created with ID: ${result.insertedId}`);
 
             // Create slots

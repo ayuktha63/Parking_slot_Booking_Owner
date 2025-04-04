@@ -33,7 +33,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _fetchParkingAreaDetails() async {
     setState(() => _isLoading = true);
     try {
-      // Fetch parking area details
+      // Fetch user details from register_login to get parking_area_name
+      final userResponse = await http.post(
+        Uri.parse('http://localhost:4000/api/owner/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'phone': widget.phone
+        }), // No password for simplicity; adjust in production
+      );
+      final userData = jsonDecode(userResponse.body);
+
+      // Fetch parking area details from parking_areas using phone as name
       final parkingResponse = await http
           .get(Uri.parse('http://localhost:4000/api/owner/parking_areas'));
       final parkingAreas = jsonDecode(parkingResponse.body);
@@ -42,15 +52,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         orElse: () => null,
       );
 
-      // Fetch user details for parking area name
-      final userResponse = await http.post(
-        Uri.parse('http://localhost:4000/api/owner/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'phone': widget.phone}),
-      );
-      final userData = jsonDecode(userResponse.body);
-
       setState(() {
+        if (userData['parking_area_name'] != null) {
+          _nameController.text = userData[
+              'parking_area_name']; // Display parking_area_name in text field
+          _parkingAreaName = userData['parking_area_name'];
+        }
         if (parkingArea != null) {
           _latController.text = parkingArea['location']['lat'].toString();
           _lngController.text = parkingArea['location']['lng'].toString();
@@ -59,14 +66,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               parkingArea['total_bike_slots'].toString();
           _totalCarSlots = parkingArea['total_car_slots'];
           _totalBikeSlots = parkingArea['total_bike_slots'];
+          _message = 'Current parking area details loaded';
+        } else {
+          _message = 'No parking area found. Please update.';
         }
-        if (userData['parking_area_name'] != null) {
-          _nameController.text = userData['parking_area_name'];
-          _parkingAreaName = userData['parking_area_name'];
-        }
-        _message = parkingArea != null
-            ? 'Current parking area details loaded'
-            : 'No parking area found. Please update.';
         _isLoading = false;
       });
     } catch (e) {
@@ -114,8 +117,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Uri.parse('http://localhost:4000/api/owner/parking_areas'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'name': widget.phone,
-          'parking_area_name': _nameController.text,
+          'name': widget.phone, // Use phone as name in parking_areas
+          'parking_area_name': _nameController
+              .text, // Update parking_area_name in register_login
           'location': {'lat': lat, 'lng': lng},
           'total_car_slots': carSlots,
           'total_bike_slots': bikeSlots,
