@@ -18,11 +18,17 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String _vehicleType = 'car';
   List<dynamic> _slots = [];
-  int _totalSlots = 0;
-  int _availableSlots = 0;
-  int _bookedSlots = 0;
   String? _parkingId;
   bool _isLoading = true;
+
+  // Separate state variables to correctly store and display car/bike counts
+  int _totalCarSlots = 0;
+  int _availableCarSlots = 0;
+  int _bookedCarSlots = 0;
+
+  int _totalBikeSlots = 0;
+  int _availableBikeSlots = 0;
+  int _bookedBikeSlots = 0;
 
   @override
   void initState() {
@@ -37,16 +43,14 @@ class _HomeScreenState extends State<HomeScreen> {
           .get(Uri.parse('http://localhost:4000/api/owner/parking_areas'));
       final parkingAreas = jsonDecode(parkingResponse.body);
       final parkingArea = parkingAreas.firstWhere(
-        (area) => area['name'] == widget.phone,
+        // Corrected: Use parkingAreaName to find the parking area
+            (area) => area['name'] == widget.parkingAreaName,
         orElse: () => null,
       );
 
       if (parkingArea == null) {
         setState(() {
           _slots = [];
-          _totalSlots = 0;
-          _availableSlots = 0;
-          _bookedSlots = 0;
           _parkingId = null;
           _isLoading = false;
         });
@@ -60,23 +64,33 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       final slots = jsonDecode(slotsResponse.body);
 
+      // Fetch all slots to get total counts for both vehicle types
+      final allCarSlotsResponse = await http.get(Uri.parse(
+          'http://localhost:4000/api/owner/parking_areas/$parkingId/slots?vehicle_type=car'));
+      final allBikeSlotsResponse = await http.get(Uri.parse(
+          'http://localhost:4000/api/owner/parking_areas/$parkingId/slots?vehicle_type=bike'));
+
+      final allCarSlots = jsonDecode(allCarSlotsResponse.body);
+      final allBikeSlots = jsonDecode(allBikeSlotsResponse.body);
+
       setState(() {
         _slots = slots;
-        _totalSlots = _vehicleType == 'car'
-            ? parkingArea['total_car_slots']
-            : parkingArea['total_bike_slots'];
-        _availableSlots = slots.where((slot) => !slot['is_booked']).length;
-        _bookedSlots = _totalSlots - _availableSlots;
         _parkingId = parkingId;
         _isLoading = false;
+
+        // Populate the correct counts for cars and bikes
+        _totalCarSlots = parkingArea['total_car_slots'];
+        _availableCarSlots = allCarSlots.where((s) => !s['is_booked']).length;
+        _bookedCarSlots = _totalCarSlots - _availableCarSlots;
+
+        _totalBikeSlots = parkingArea['total_bike_slots'];
+        _availableBikeSlots = allBikeSlots.where((s) => !s['is_booked']).length;
+        _bookedBikeSlots = _totalBikeSlots - _availableBikeSlots;
       });
     } catch (e) {
       print('Error fetching slots: $e');
       setState(() {
         _slots = [];
-        _totalSlots = 0;
-        _availableSlots = 0;
-        _bookedSlots = 0;
         _isLoading = false;
       });
     }
@@ -92,7 +106,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (bookings.isEmpty) return;
 
       final booking = bookings.firstWhere(
-        (b) => b['slot_id'] == slot['_id'] && b['status'] == 'active',
+            (b) => b['slot_id'] == slot['_id'] && b['status'] == 'active',
         orElse: () => null,
       );
 
@@ -132,8 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     int secondsDifference =
                         exitTime.difference(entryTime).inSeconds;
                     setStateDialog(() {
-                      calculatedAmount =
-                          secondsDifference; // 1 rupee per second
+                      calculatedAmount = secondsDifference;
                     });
                   },
                   child: const Text('Calculate Now',
@@ -143,7 +156,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   TextButton(
                     onPressed: () async {
                       try {
-                        // Complete the booking and free the slot
                         final completeResponse = await http.post(
                           Uri.parse(
                               'http://localhost:4000/api/owner/bookings/complete'),
@@ -169,7 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   'entry_time': booking['entry_time'],
                                   'exit_time': exitTime.toIso8601String(),
                                   'date':
-                                      exitTime.toIso8601String().split('T')[0],
+                                  exitTime.toIso8601String().split('T')[0],
                                   'parking_name': widget.parkingAreaName,
                                   'amount': calculatedAmount,
                                 },
@@ -211,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final vehicleNumberController = TextEditingController();
         return AlertDialog(
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: const [
               Icon(Icons.directions_car, color: Color(0xFF3F51B5)),
@@ -226,7 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ? 'Car Number Plate'
                   : 'Bike Number Plate',
               border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               prefixIcon: Icon(
                   _vehicleType == 'car'
                       ? Icons.directions_car
@@ -244,7 +256,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Uri.parse('http://localhost:4000/api/owner/bookings'),
                     headers: {'Content-Type': 'application/json'},
                     body: jsonEncode({
-                      'parking_id': slot['parking_id'],
+                      'parking_id': _parkingId,
                       'slot_id': slot['_id'],
                       'vehicle_type': _vehicleType,
                       'number_plate': vehicleNumberController.text,
@@ -362,10 +374,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      // Correctly displaying car slot counts
                       _buildSlotCount(Icons.directions_car, "Cars",
-                          _availableSlots, _bookedSlots),
+                          _availableCarSlots, _bookedCarSlots),
+                      // Correctly displaying bike slot counts
                       _buildSlotCount(Icons.motorcycle, "Bikes",
-                          _availableSlots, _bookedSlots),
+                          _availableBikeSlots, _bookedBikeSlots),
                     ],
                   ),
                 ],
@@ -404,7 +418,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide:
-                              const BorderSide(color: Color(0xFF3F51B5)),
+                          const BorderSide(color: Color(0xFF3F51B5)),
                         ),
                         prefixIcon: const Icon(Icons.directions_car,
                             color: Color(0xFF3F51B5)),
@@ -448,8 +462,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             _buildLegendItem(Colors.grey[300]!, "Available"),
-                            _buildLegendItem(
-                                const Color(0xFF4CAF50), "Available"),
+                            _buildLegendItem(const Color(0xFF4CAF50), "Booked"),
                             _buildLegendItem(Colors.red[300]!, "Booked"),
                           ],
                         ),
@@ -457,60 +470,60 @@ class _HomeScreenState extends State<HomeScreen> {
                         _isLoading
                             ? const Center(child: CircularProgressIndicator())
                             : _slots.isEmpty
-                                ? const Center(
-                                    child: Text(
-                                        "No slots available. Update parking area in Profile."))
-                                : Wrap(
-                                    spacing: 10.0,
-                                    runSpacing: 10.0,
-                                    children: _slots.map((slot) {
-                                      final slotId = slot['_id'];
-                                      final slotNumber = slot['slot_number'];
-                                      final isBooked =
-                                          slot['is_booked'] == true;
+                            ? const Center(
+                            child: Text(
+                                "No slots available. Update parking area in Profile."))
+                            : Wrap(
+                          spacing: 10.0,
+                          runSpacing: 10.0,
+                          children: _slots.map((slot) {
+                            final slotId = slot['_id'];
+                            final slotNumber = slot['slot_number'];
+                            final isBooked =
+                                slot['is_booked'] == true;
 
-                                      return GestureDetector(
-                                        onTap: () => isBooked
-                                            ? _showBookedDetails(slot)
-                                            : _bookSlot(slot),
-                                        child: AnimatedContainer(
-                                          duration:
-                                              const Duration(milliseconds: 200),
-                                          width: 65,
-                                          height: 65,
-                                          decoration: BoxDecoration(
-                                            color: isBooked
-                                                ? Colors.red[300]
-                                                : const Color(0xFF4CAF50),
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            boxShadow: !isBooked
-                                                ? [
-                                                    BoxShadow(
-                                                      color: const Color(
-                                                              0xFF4CAF50)
-                                                          .withOpacity(0.4),
-                                                      blurRadius: 8,
-                                                      offset:
-                                                          const Offset(0, 2),
-                                                    )
-                                                  ]
-                                                : [],
-                                          ),
-                                          child: Center(
-                                            child: Text(
-                                              "$slotNumber",
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
+                            return GestureDetector(
+                              onTap: () => isBooked
+                                  ? _showBookedDetails(slot)
+                                  : _bookSlot(slot),
+                              child: AnimatedContainer(
+                                duration:
+                                const Duration(milliseconds: 200),
+                                width: 65,
+                                height: 65,
+                                decoration: BoxDecoration(
+                                  color: isBooked
+                                      ? Colors.red[300]
+                                      : const Color(0xFF4CAF50),
+                                  borderRadius:
+                                  BorderRadius.circular(12),
+                                  boxShadow: !isBooked
+                                      ? [
+                                    BoxShadow(
+                                      color: const Color(
+                                          0xFF4CAF50)
+                                          .withOpacity(0.4),
+                                      blurRadius: 8,
+                                      offset:
+                                      const Offset(0, 2),
+                                    )
+                                  ]
+                                      : [],
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    "$slotNumber",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
                                   ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
                       ],
                     ),
                   ),

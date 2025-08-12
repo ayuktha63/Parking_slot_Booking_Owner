@@ -6,7 +6,7 @@ const uri = "mongodb://localhost:27017";
 const client = new MongoClient(uri);
 
 app.use(express.json());
-app.use(cors({ origin: '*' })); // Allow all origins for development
+app.use(cors({ origin: '*' }));
 
 // Database Connection with Retry
 async function connectDB() {
@@ -37,21 +37,18 @@ app.post('/api/owner/register', async (req, res) => {
     const db = await dbPromise;
 
     try {
-        console.log(`Registering owner with phone: ${phone}`);
         const existingUser = await db.collection('register_login').findOne({ phone });
         if (existingUser) {
-            console.log(`User with phone ${phone} already exists`);
             return res.status(400).json({ message: "User already exists" });
         }
 
         const user = {
             phone,
             parking_area_name,
-            password, // In production, use bcrypt to hash this
+            password,
             createdAt: new Date(),
         };
         await db.collection('register_login').insertOne(user);
-        console.log(`Owner registered successfully`);
         res.status(200).json({ message: "Registered successfully" });
     } catch (error) {
         console.error("Error registering owner:", error);
@@ -65,15 +62,12 @@ app.post('/api/owner/login', async (req, res) => {
     const db = await dbPromise;
 
     try {
-        console.log(`Logging in owner with phone: ${phone}`);
         const user = password
             ? await db.collection('register_login').findOne({ phone, password })
-            : await db.collection('register_login').findOne({ phone }); // Allow fetching without password for profile
+            : await db.collection('register_login').findOne({ phone });
         if (!user) {
-            console.log(`Invalid credentials for phone: ${phone}`);
             return res.status(400).json({ message: "Invalid credentials" });
         }
-        console.log(`Login successful for phone: ${phone}`);
         res.status(200).json({
             message: "Login successful",
             phone: user.phone,
@@ -85,14 +79,13 @@ app.post('/api/owner/login', async (req, res) => {
     }
 });
 
-// Update or Create Parking Area
+// Update or Create Parking Area (Fixed Logic)
 app.post('/api/owner/parking_areas', async (req, res) => {
     const { name, parking_area_name, location, total_car_slots, total_bike_slots } = req.body;
     const db = await dbPromise;
 
     try {
-        console.log("Processing parking area with data:", { name, parking_area_name, location, total_car_slots, total_bike_slots });
-        const existingArea = await db.collection('parking_areas').findOne({ name });
+        const existingArea = await db.collection('parking_areas').findOne({ name: parking_area_name });
 
         if (existingArea) {
             const currentCarSlots = existingArea.total_car_slots;
@@ -101,7 +94,7 @@ app.post('/api/owner/parking_areas', async (req, res) => {
             const bikeSlotsChanged = total_bike_slots !== currentBikeSlots;
 
             const updateResult = await db.collection('parking_areas').updateOne(
-                { name },
+                { name: parking_area_name },
                 {
                     $set: {
                         location: { lat: location.lat, lng: location.lng },
@@ -117,12 +110,9 @@ app.post('/api/owner/parking_areas', async (req, res) => {
                 { $set: { parking_area_name, updatedAt: new Date() } }
             );
 
-            console.log(`Parking area ${name} updated: ${updateResult.modifiedCount} document(s) modified`);
-
             if (carSlotsChanged || bikeSlotsChanged) {
                 const parkingId = existingArea._id;
                 await db.collection('slots').deleteMany({ parking_id: parkingId });
-                console.log(`Deleted all existing slots for parking_id: ${parkingId}`);
 
                 const newCarSlots = Array.from({ length: total_car_slots }, (_, i) => ({
                     parking_id: parkingId,
@@ -140,8 +130,7 @@ app.post('/api/owner/parking_areas', async (req, res) => {
                     current_booking_id: null,
                 }));
 
-                const slotsResult = await db.collection('slots').insertMany([...newCarSlots, ...newBikeSlots]);
-                console.log(`Inserted ${slotsResult.insertedCount} new slots (car: ${total_car_slots}, bike: ${total_bike_slots})`);
+                await db.collection('slots').insertMany([...newCarSlots, ...newBikeSlots]);
 
                 await db.collection('parking_areas').updateOne(
                     { _id: parkingId },
@@ -159,7 +148,7 @@ app.post('/api/owner/parking_areas', async (req, res) => {
             res.status(200).json({ message: "Parking area updated successfully" });
         } else {
             const parkingArea = {
-                name,
+                name: parking_area_name,
                 location: { lat: location.lat, lng: location.lng },
                 total_car_slots,
                 available_car_slots: total_car_slots,
@@ -176,8 +165,6 @@ app.post('/api/owner/parking_areas', async (req, res) => {
                 { $set: { parking_area_name, updatedAt: new Date() } }
             );
 
-            console.log(`Parking area created with ID: ${result.insertedId}`);
-
             const carSlots = Array.from({ length: total_car_slots }, (_, i) => ({
                 parking_id: result.insertedId,
                 slot_number: i + 1,
@@ -192,8 +179,7 @@ app.post('/api/owner/parking_areas', async (req, res) => {
                 status: "available",
                 current_booking_id: null,
             }));
-            const slotsResult = await db.collection('slots').insertMany([...carSlots, ...bikeSlots]);
-            console.log(`Inserted ${slotsResult.insertedCount} slots`);
+            await db.collection('slots').insertMany([...carSlots, ...bikeSlots]);
 
             res.status(200).json({ message: "Parking area created", id: result.insertedId });
         }
@@ -208,9 +194,7 @@ app.get('/api/owner/parking_areas', async (req, res) => {
     const db = await dbPromise;
 
     try {
-        console.log("Fetching all parking areas...");
         const parkingAreas = await db.collection('parking_areas').find().toArray();
-        console.log("Parking areas fetched:", parkingAreas);
         res.status(200).json(parkingAreas);
     } catch (error) {
         console.error("Error fetching parking areas:", error);
@@ -222,10 +206,9 @@ app.get('/api/owner/parking_areas', async (req, res) => {
 app.get('/api/owner/parking_areas/:id/slots', async (req, res) => {
     const db = await dbPromise;
     const { vehicle_type } = req.query;
-    const parkingId = new ObjectId(req.params.id);
 
     try {
-        console.log(`Fetching slots for parking_id: ${req.params.id}, vehicle_type: ${vehicle_type}`);
+        const parkingId = new ObjectId(req.params.id);
         const query = { parking_id: parkingId };
         if (vehicle_type) query.vehicle_type = vehicle_type.toLowerCase();
 
@@ -240,7 +223,6 @@ app.get('/api/owner/parking_areas/:id/slots', async (req, res) => {
             is_booked: bookedSlotIds.includes(slot._id.toString()),
         }));
 
-        console.log(`Returning ${slotsWithStatus.length} slots`);
         res.status(200).json(slotsWithStatus);
     } catch (error) {
         console.error("Error fetching slots:", error);
@@ -254,10 +236,8 @@ app.post('/api/owner/bookings', async (req, res) => {
     const db = await dbPromise;
 
     try {
-        console.log("Booking slot with data:", { parking_id, slot_id, vehicle_type, number_plate, entry_time });
         const slot = await db.collection('slots').findOne({ _id: new ObjectId(slot_id) });
         if (!slot || slot.status !== "available") {
-            console.log(`Slot ${slot_id} not available`);
             return res.status(400).json({ message: "Slot not available" });
         }
 
@@ -272,7 +252,6 @@ app.post('/api/owner/bookings', async (req, res) => {
             createdAt: new Date(),
         };
         const result = await db.collection('bookings').insertOne(booking);
-        console.log(`Booking created with ID: ${result.insertedId}`);
 
         await db.collection('slots').updateOne(
             { _id: new ObjectId(slot_id) },
@@ -304,12 +283,10 @@ app.get('/api/owner/bookings', async (req, res) => {
     const db = await dbPromise;
 
     try {
-        console.log(`Fetching booking for slot_id: ${slot_id}`);
         const bookings = await db.collection('bookings').find({
             slot_id: new ObjectId(slot_id),
             status: "active",
         }).toArray();
-        console.log("Bookings fetched:", bookings);
         res.status(200).json(bookings);
     } catch (error) {
         console.error("Error fetching bookings:", error);
@@ -323,9 +300,6 @@ app.post('/api/owner/bookings/complete', async (req, res) => {
     const db = await dbPromise;
 
     try {
-        console.log("Completing booking for slot_id:", slot_id);
-
-        // Update the booking status to "completed" and add exit_time and amount
         const bookingUpdateResult = await db.collection('bookings').updateOne(
             { slot_id: new ObjectId(slot_id), status: "active" },
             {
@@ -339,17 +313,14 @@ app.post('/api/owner/bookings/complete', async (req, res) => {
         );
 
         if (bookingUpdateResult.matchedCount === 0) {
-            console.log(`No active booking found for slot_id: ${slot_id}`);
             return res.status(400).json({ message: "No active booking found" });
         }
 
-        // Free the slot
         await db.collection('slots').updateOne(
             { _id: new ObjectId(slot_id) },
             { $set: { status: "available", current_booking_id: null } }
         );
 
-        // Update parking area availability
         const updateField = vehicle_type.toLowerCase() === "car"
             ? { $inc: { available_car_slots: 1, booked_car_slots: -1 } }
             : { $inc: { available_bike_slots: 1, booked_bike_slots: -1 } };
@@ -358,7 +329,6 @@ app.post('/api/owner/bookings/complete', async (req, res) => {
             updateField
         );
 
-        console.log(`Booking completed and slot ${slot_id} freed`);
         res.status(200).json({ message: "Booking completed and slot freed" });
     } catch (error) {
         console.error("Error completing booking:", error);
