@@ -251,6 +251,10 @@ class _HomeScreenState extends State<HomeScreen> {
           actions: [
             TextButton(
               onPressed: () async {
+                if (vehicleNumberController.text.isEmpty) {
+                  _showErrorDialog('Vehicle number plate is required.');
+                  return;
+                }
                 try {
                   final response = await http.post(
                     Uri.parse('http://localhost:4000/api/owner/bookings'),
