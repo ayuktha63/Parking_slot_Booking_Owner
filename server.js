@@ -336,5 +336,50 @@ app.post('/api/owner/bookings/complete', async (req, res) => {
     }
 });
 
+// New Endpoint: Get user profile details
+app.get('/api/user/profile/:phone', async (req, res) => {
+  const db = await dbPromise;
+  const { phone } = req.params;
+
+  try {
+    const user = await db.collection('users').findOne({ phone });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json(user);
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+// New Endpoint: Get user bookings
+app.get('/api/user/bookings/:phone', async (req, res) => {
+    const db = await dbPromise;
+    const { phone } = req.params;
+
+    try {
+        const bookings = await db.collection('bookings').find({ phone }).sort({ entry_time: -1 }).toArray();
+
+        // Populate parking area name for each booking
+        const populatedBookings = await Promise.all(bookings.map(async (booking) => {
+            const parkingArea = await db.collection('parking_areas').findOne({ _id: booking.parking_id });
+            const slot = await db.collection('slots').findOne({ _id: booking.slot_id });
+            return {
+                ...booking,
+                location: parkingArea ? parkingArea.name : 'Unknown Location',
+                slot_number: slot ? slot.slot_number : 'Unknown Slot',
+            };
+        }));
+
+        res.status(200).json(populatedBookings);
+    } catch (error) {
+        console.error("Error fetching user bookings:", error);
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+});
+
 // Start Server on Port 4000
 app.listen(4000, () => console.log("Server running on port 4000"));
