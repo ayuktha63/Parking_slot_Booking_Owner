@@ -8,7 +8,6 @@ class SuccessScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Determine if this is a payment or booking success based on presence of 'amount'
     final isPayment = receipt['amount'] != null;
 
     return Scaffold(

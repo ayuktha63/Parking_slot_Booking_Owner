@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:io' show Platform; // Import for platform checks
+import 'package:flutter/foundation.dart' show kIsWeb; // Import for web check
 import 'profile_screen.dart';
 import 'success_screen.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 
 class HomeScreen extends StatefulWidget {
   final String phone;
@@ -16,12 +19,15 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const String RAZORPAY_KEY = 'rzp_live_R6QQALUuJwgDaD';
+  String apiHost = 'localhost';
+
+  Razorpay? _razorpay; // Made nullable
   String _vehicleType = 'car';
   List<dynamic> _slots = [];
   String? _parkingId;
   bool _isLoading = true;
 
-  // Separate state variables to correctly store and display car/bike counts
   int _totalCarSlots = 0;
   int _availableCarSlots = 0;
   int _bookedCarSlots = 0;
@@ -33,18 +39,36 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    if (kIsWeb) {
+      apiHost = '127.0.0.1';
+    } else {
+      apiHost = '10.0.2.2';
+    }
+
     _fetchSlots();
+    // Initialize Razorpay only on Android and iOS.
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      _razorpay = Razorpay();
+      _razorpay!.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
+      _razorpay!.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+      _razorpay!.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+    }
+  }
+
+  @override
+  void dispose() {
+    _razorpay?.clear();
+    super.dispose();
   }
 
   Future<void> _fetchSlots() async {
     setState(() => _isLoading = true);
     try {
       final parkingResponse = await http
-          .get(Uri.parse('http://localhost:4000/api/owner/parking_areas'));
+          .get(Uri.parse('http://$apiHost:4000/api/owner/parking_areas'));
       final parkingAreas = jsonDecode(parkingResponse.body);
       final parkingArea = parkingAreas.firstWhere(
-        // Corrected: Use parkingAreaName to find the parking area
-            (area) => area['name'] == widget.parkingAreaName,
+        (area) => area['name'] == widget.parkingAreaName,
         orElse: () => null,
       );
 
@@ -60,15 +84,14 @@ class _HomeScreenState extends State<HomeScreen> {
       final parkingId = parkingArea['_id'];
       final slotsResponse = await http.get(
         Uri.parse(
-            'http://localhost:4000/api/owner/parking_areas/$parkingId/slots?vehicle_type=$_vehicleType'),
+            'http://$apiHost:4000/api/owner/parking_areas/$parkingId/slots?vehicle_type=$_vehicleType'),
       );
       final slots = jsonDecode(slotsResponse.body);
 
-      // Fetch all slots to get total counts for both vehicle types
       final allCarSlotsResponse = await http.get(Uri.parse(
-          'http://localhost:4000/api/owner/parking_areas/$parkingId/slots?vehicle_type=car'));
+          'http://$apiHost:4000/api/owner/parking_areas/$parkingId/slots?vehicle_type=car'));
       final allBikeSlotsResponse = await http.get(Uri.parse(
-          'http://localhost:4000/api/owner/parking_areas/$parkingId/slots?vehicle_type=bike'));
+          'http://$apiHost:4000/api/owner/parking_areas/$parkingId/slots?vehicle_type=bike'));
 
       final allCarSlots = jsonDecode(allCarSlotsResponse.body);
       final allBikeSlots = jsonDecode(allBikeSlotsResponse.body);
@@ -78,7 +101,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _parkingId = parkingId;
         _isLoading = false;
 
-        // Populate the correct counts for cars and bikes
         _totalCarSlots = parkingArea['total_car_slots'];
         _availableCarSlots = allCarSlots.where((s) => !s['is_booked']).length;
         _bookedCarSlots = _totalCarSlots - _availableCarSlots;
@@ -96,17 +118,103 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _openCheckout(
+      int amountInPaise, Map<String, dynamic> bookingDetails) async {
+    // Check if Razorpay is supported before trying to open it
+    if (_razorpay == null) {
+      _showErrorDialog("Payment is only supported on Android and iOS devices.");
+      return;
+    }
+
+    final options = <String, Object>{
+      'key': RAZORPAY_KEY,
+      'amount': 100, // Hardcoded to 1 rupee (100 paise)
+      'name': 'Parking Area Owner App',
+      'description': 'Payment for Parking Slot',
+      'prefill': {'contact': widget.phone, 'email': 'owner@example.com'},
+      'external': {
+        'wallets': ['paytm']
+      }
+    };
+
+    try {
+      _razorpay!.open(options);
+    } catch (e) {
+      _showErrorDialog("Error opening Razorpay checkout: $e");
+    }
+  }
+
+  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
+    _showErrorDialog("SUCCESS: ${response.paymentId}");
+
+    // Hardcoded booking details for testing
+    final Map<String, dynamic> booking = {
+      'slot_id': _slots.firstWhere((s) => s['is_booked'])['_id'],
+      'parking_id': _parkingId,
+      'vehicle_type': _vehicleType,
+      'exit_time': DateTime.now().toIso8601String(),
+      'amount': 1,
+    };
+
+    try {
+      final completeResponse = await http.post(
+        Uri.parse('http://$apiHost:4000/api/owner/bookings/complete'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'slot_id': booking['slot_id'],
+          'parking_id': booking['parking_id'],
+          'vehicle_type': booking['vehicle_type'],
+          'exit_time': booking['exit_time'],
+          'amount': booking['amount'],
+        }),
+      );
+
+      if (completeResponse.statusCode == 200) {
+        final successReceipt = {
+          ...booking,
+          'slot_number':
+              _slots.firstWhere((s) => s['is_booked'])['slot_number'],
+          'vehicle_number': "TEST-1234",
+          'entry_time': "TEST ENTRY TIME",
+          'date': DateTime.now().toIso8601String().split('T')[0],
+          'parking_name': widget.parkingAreaName,
+        };
+        Navigator.pop(context);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SuccessScreen(receipt: successReceipt),
+          ),
+        ).then((_) => _fetchSlots());
+      } else {
+        _showErrorDialog(
+            'Failed to complete booking: ${completeResponse.body}');
+      }
+    } catch (e) {
+      print('Error completing booking: $e');
+      _showErrorDialog('Error completing booking: $e');
+    }
+  }
+
+  void _handlePaymentError(PaymentFailureResponse response) {
+    _showErrorDialog("ERROR: ${response.code} - ${response.message}");
+  }
+
+  void _handleExternalWallet(ExternalWalletResponse response) {
+    _showErrorDialog("EXTERNAL WALLET: ${response.walletName}");
+  }
+
   void _showBookedDetails(dynamic slot) async {
     try {
       final bookingResponse = await http.get(
         Uri.parse(
-            'http://localhost:4000/api/owner/bookings?slot_id=${slot['_id']}'),
+            'http://$apiHost:4000/api/owner/bookings?slot_id=${slot['_id']}'),
       );
       final bookings = jsonDecode(bookingResponse.body);
       if (bookings.isEmpty) return;
 
       final booking = bookings.firstWhere(
-            (b) => b['slot_id'] == slot['_id'] && b['status'] == 'active',
+        (b) => b['slot_id'] == slot['_id'] && b['status'] == 'active',
         orElse: () => null,
       );
 
@@ -154,50 +262,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 if (calculatedAmount != null)
                   TextButton(
-                    onPressed: () async {
-                      try {
-                        final completeResponse = await http.post(
-                          Uri.parse(
-                              'http://localhost:4000/api/owner/bookings/complete'),
-                          headers: {'Content-Type': 'application/json'},
-                          body: jsonEncode({
-                            'slot_id': slot['_id'],
-                            'parking_id': slot['parking_id'],
-                            'vehicle_type': _vehicleType,
-                            'exit_time': exitTime.toIso8601String(),
-                            'amount': calculatedAmount,
-                          }),
-                        );
-
-                        if (completeResponse.statusCode == 200) {
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => SuccessScreen(
-                                receipt: {
-                                  'slot_number': slot['slot_number'],
-                                  'vehicle_number': booking['number_plate'],
-                                  'entry_time': booking['entry_time'],
-                                  'exit_time': exitTime.toIso8601String(),
-                                  'date':
-                                  exitTime.toIso8601String().split('T')[0],
-                                  'parking_name': widget.parkingAreaName,
-                                  'amount': calculatedAmount,
-                                },
-                              ),
-                            ),
-                          ).then((_) => _fetchSlots());
-                        } else {
-                          _showErrorDialog(
-                              'Failed to complete booking: ${completeResponse.body}');
-                        }
-                      } catch (e) {
-                        print('Error completing booking: $e');
-                        _showErrorDialog('Error completing booking: $e');
-                      }
+                    onPressed: () {
+                      _onPayButtonPressed(slot, calculatedAmount, exitTime);
                     },
-                    child: const Text('Pay',
+                    child: const Text('Pay with Razorpay',
                         style: TextStyle(color: Color(0xFF3F51B5))),
                   ),
                 TextButton(
@@ -216,6 +284,18 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // New function to handle the pay button press.
+  void _onPayButtonPressed(
+      dynamic slot, int? calculatedAmount, DateTime exitTime) {
+    _openCheckout(100, {
+      'slot_id': slot['_id'],
+      'parking_id': slot['parking_id'],
+      'vehicle_type': _vehicleType,
+      'exit_time': exitTime.toIso8601String(),
+      'amount': calculatedAmount,
+    });
+  }
+
   void _bookSlot(dynamic slot) {
     showDialog(
       context: context,
@@ -223,7 +303,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final vehicleNumberController = TextEditingController();
         return AlertDialog(
           shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: const [
               Icon(Icons.directions_car, color: Color(0xFF3F51B5)),
@@ -238,7 +318,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ? 'Car Number Plate'
                   : 'Bike Number Plate',
               border:
-              OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               prefixIcon: Icon(
                   _vehicleType == 'car'
                       ? Icons.directions_car
@@ -257,7 +337,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
                 try {
                   final response = await http.post(
-                    Uri.parse('http://localhost:4000/api/owner/bookings'),
+                    Uri.parse('http://$apiHost:4000/api/owner/bookings'),
                     headers: {'Content-Type': 'application/json'},
                     body: jsonEncode({
                       'parking_id': _parkingId,
@@ -378,10 +458,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Correctly displaying car slot counts
                       _buildSlotCount(Icons.directions_car, "Cars",
                           _availableCarSlots, _bookedCarSlots),
-                      // Correctly displaying bike slot counts
                       _buildSlotCount(Icons.motorcycle, "Bikes",
                           _availableBikeSlots, _bookedBikeSlots),
                     ],
@@ -422,7 +500,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide:
-                          const BorderSide(color: Color(0xFF3F51B5)),
+                              const BorderSide(color: Color(0xFF3F51B5)),
                         ),
                         prefixIcon: const Icon(Icons.directions_car,
                             color: Color(0xFF3F51B5)),
@@ -474,60 +552,60 @@ class _HomeScreenState extends State<HomeScreen> {
                         _isLoading
                             ? const Center(child: CircularProgressIndicator())
                             : _slots.isEmpty
-                            ? const Center(
-                            child: Text(
-                                "No slots available. Update parking area in Profile."))
-                            : Wrap(
-                          spacing: 10.0,
-                          runSpacing: 10.0,
-                          children: _slots.map((slot) {
-                            final slotId = slot['_id'];
-                            final slotNumber = slot['slot_number'];
-                            final isBooked =
-                                slot['is_booked'] == true;
+                                ? const Center(
+                                    child: Text(
+                                        "No slots available. Update parking area in Profile."))
+                                : Wrap(
+                                    spacing: 10.0,
+                                    runSpacing: 10.0,
+                                    children: _slots.map((slot) {
+                                      final slotId = slot['_id'];
+                                      final slotNumber = slot['slot_number'];
+                                      final isBooked =
+                                          slot['is_booked'] == true;
 
-                            return GestureDetector(
-                              onTap: () => isBooked
-                                  ? _showBookedDetails(slot)
-                                  : _bookSlot(slot),
-                              child: AnimatedContainer(
-                                duration:
-                                const Duration(milliseconds: 200),
-                                width: 65,
-                                height: 65,
-                                decoration: BoxDecoration(
-                                  color: isBooked
-                                      ? Colors.red[300]
-                                      : const Color(0xFF4CAF50),
-                                  borderRadius:
-                                  BorderRadius.circular(12),
-                                  boxShadow: !isBooked
-                                      ? [
-                                    BoxShadow(
-                                      color: const Color(
-                                          0xFF4CAF50)
-                                          .withOpacity(0.4),
-                                      blurRadius: 8,
-                                      offset:
-                                      const Offset(0, 2),
-                                    )
-                                  ]
-                                      : [],
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    "$slotNumber",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
+                                      return GestureDetector(
+                                        onTap: () => isBooked
+                                            ? _showBookedDetails(slot)
+                                            : _bookSlot(slot),
+                                        child: AnimatedContainer(
+                                          duration:
+                                              const Duration(milliseconds: 200),
+                                          width: 65,
+                                          height: 65,
+                                          decoration: BoxDecoration(
+                                            color: isBooked
+                                                ? Colors.red[300]
+                                                : const Color(0xFF4CAF50),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            boxShadow: !isBooked
+                                                ? [
+                                                    BoxShadow(
+                                                      color: const Color(
+                                                              0xFF4CAF50)
+                                                          .withOpacity(0.4),
+                                                      blurRadius: 8,
+                                                      offset:
+                                                          const Offset(0, 2),
+                                                    )
+                                                  ]
+                                                : [],
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              "$slotNumber",
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
                                   ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
                       ],
                     ),
                   ),
