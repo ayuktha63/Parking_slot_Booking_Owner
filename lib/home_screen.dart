@@ -57,8 +57,11 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     if (kIsWeb) {
       apiHost = '127.0.0.1';
-    } else {
+    } else if (Platform.isAndroid) {
       apiHost = '10.0.2.2';
+    } else {
+      // Handle other platforms if necessary, or keep default
+      apiHost = '10.0.2.2'; // Default for emulators
     }
 
     _fetchSlots();
@@ -163,9 +166,17 @@ class _HomeScreenState extends State<HomeScreen> {
   void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     _showErrorDialog("SUCCESS: ${response.paymentId}");
 
+    // Find a booked slot to 'complete'
+    final bookedSlot =
+        _slots.firstWhere((s) => s['is_booked'], orElse: () => null);
+    if (bookedSlot == null) {
+      _showErrorDialog("Error: No booked slot found to complete payment.");
+      return;
+    }
+
     // Hardcoded booking details for testing
     final Map<String, dynamic> booking = {
-      'slot_id': _slots.firstWhere((s) => s['is_booked'])['_id'],
+      'slot_id': bookedSlot['_id'], // Use the found booked slot
       'parking_id': _parkingId,
       'vehicle_type': _vehicleType,
       'exit_time': DateTime.now().toIso8601String(),
@@ -188,20 +199,21 @@ class _HomeScreenState extends State<HomeScreen> {
       if (completeResponse.statusCode == 200) {
         final successReceipt = {
           ...booking,
-          'slot_number':
-              _slots.firstWhere((s) => s['is_booked'])['slot_number'],
+          'slot_number': bookedSlot['slot_number'], // Use the found booked slot
           'vehicle_number': "TEST-1234",
           'entry_time': "TEST ENTRY TIME",
           'date': DateTime.now().toIso8601String().split('T')[0],
           'parking_name': widget.parkingAreaName,
         };
-        Navigator.pop(context);
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SuccessScreen(receipt: successReceipt),
-          ),
-        ).then((_) => _fetchSlots());
+        if (mounted) {
+          Navigator.pop(context); // Close the dialog
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SuccessScreen(receipt: successReceipt),
+            ),
+          ).then((_) => _fetchSlots());
+        }
       } else {
         _showErrorDialog(
             'Failed to complete booking: ${completeResponse.body}');
@@ -403,19 +415,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
 
                   if (response.statusCode == 200) {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => SuccessScreen(
-                          receipt: {
-                            'slot_number': slot['slot_number'],
-                            'vehicle_number': vehicleNumberController.text,
-                            'entry_time': DateTime.now().toIso8601String(),
-                          },
+                    if (mounted) {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => SuccessScreen(
+                            receipt: {
+                              'slot_number': slot['slot_number'],
+                              'vehicle_number': vehicleNumberController.text,
+                              'entry_time': DateTime.now().toIso8601String(),
+                            },
+                          ),
                         ),
-                      ),
-                    ).then((_) => _fetchSlots());
+                      ).then((_) => _fetchSlots());
+                    }
                   } else {
                     _showErrorDialog('Failed to book slot: ${response.body}');
                   }
@@ -475,6 +489,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         elevation: 0,
         backgroundColor: appBarColor, // New Color
+        iconTheme: IconThemeData(color: primaryText), // Make back button white
         actions: [
           IconButton(
             icon: const Icon(Icons.person, color: primaryText), // New Color
@@ -522,12 +537,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 16),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildSlotCount(Icons.directions_car, "Cars",
-                          _availableCarSlots, _bookedCarSlots),
-                      _buildSlotCount(Icons.motorcycle, "Bikes",
-                          _availableBikeSlots, _bookedBikeSlots),
+                      Expanded(
+                        // RESPONSIVE FIX
+                        child: _buildSlotCount(Icons.directions_car, "Cars",
+                            _availableCarSlots, _bookedCarSlots),
+                      ),
+                      const SizedBox(width: 16), // RESPONSIVE FIX
+                      Expanded(
+                        // RESPONSIVE FIX
+                        child: _buildSlotCount(Icons.motorcycle, "Bikes",
+                            _availableBikeSlots, _bookedBikeSlots),
+                      ),
                     ],
                   ),
                 ],
@@ -541,7 +562,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   _buildSectionTitle("Vehicle Type"),
                   const SizedBox(height: 16),
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    // Removed padding, handled by Dropdown decoration
                     decoration: BoxDecoration(
                       color: cardSurface, // New Color
                       borderRadius: BorderRadius.circular(16),
@@ -559,6 +580,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         // New Style
                         labelText: "Select Vehicle Type",
                         labelStyle: GoogleFonts.poppins(color: hintText),
+                        contentPadding: const EdgeInsets.symmetric(
+                            vertical: 16, horizontal: 0), // Adjust padding
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -621,10 +644,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          mainAxisAlignment:
+                              MainAxisAlignment.start, // Adjust alignment
                           children: [
                             _buildLegendItem(const Color(0xFF4CAF50),
                                 "Available"), // Fixed Legend
+                            const SizedBox(width: 24), // Add spacing
                             _buildLegendItem(
                                 errorRed, "Booked"), // Fixed Legend
                           ],
@@ -639,6 +664,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ? Center(
                                     child: Text(
                                     "No slots available. Update parking area in Profile.",
+                                    textAlign: TextAlign.center,
                                     style: GoogleFonts.poppins(
                                         color: secondaryText), // New Style
                                   ))
@@ -765,26 +791,35 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Icon(icon, size: 20, color: primaryText), // New Color
           const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "$available / ${available + booked}",
-                style: GoogleFonts.poppins(
-                  // New Style
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: primaryText,
-                ),
-              ),
-              Text(
-                "$label (Avail/Total)",
-                style: GoogleFonts.poppins(
+          Expanded(
+            // RESPONSIVE FIX
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "$available / ${available + booked}",
+                  style: GoogleFonts.poppins(
                     // New Style
-                    fontSize: 12,
-                    color: secondaryText),
-              ),
-            ],
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: primaryText,
+                  ),
+                  maxLines: 1, // Prevent number from wrapping
+                  overflow:
+                      TextOverflow.ellipsis, // Add ellipsis if it's too long
+                ),
+                Text(
+                  "$label (Avail/Total)",
+                  style: GoogleFonts.poppins(
+                      // New Style
+                      fontSize: 12,
+                      color: secondaryText),
+                  maxLines: 2, // Allow label to wrap
+                  overflow:
+                      TextOverflow.ellipsis, // Add ellipsis if it's too long
+                ),
+              ],
+            ),
           ),
         ],
       ),
