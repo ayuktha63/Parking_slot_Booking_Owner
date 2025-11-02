@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart'; // Import Google Fonts
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io' show Platform; // Import for platform checks
@@ -6,6 +7,21 @@ import 'package:flutter/foundation.dart' show kIsWeb; // Import for web check
 import 'profile_screen.dart';
 import 'success_screen.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
+
+// --- NEW DESIGN SYSTEM COLORS ---
+const Color appBackground = Color(0xFF1C1C1E);
+const Color cardSurface = Color(0xFF2C2C2E);
+const Color appBarColor = Color(0xFF1C1C1E);
+const Color infoItemBg = Color(0xFF3A3A3C);
+const Color primaryText = Color(0xFFFFFFFF);
+const Color secondaryText = Color(0xFFB0B0B5);
+const Color hintText = Color(0xFF8E8E93);
+const Color darkText = Color(0xFF000000);
+const Color markerColor = Color.fromARGB(255, 215, 215, 215); // Accent
+const Color elevatedButtonBg = Color(0xFFFFFFFF);
+const Color errorRed = Color(0xFFD32F2F);
+final Color shadow = Color.fromRGBO(0, 0, 0, 0.3);
+// --- END NEW DESIGN SYSTEM COLORS ---
 
 class HomeScreen extends StatefulWidget {
   final String phone;
@@ -226,24 +242,38 @@ class _HomeScreenState extends State<HomeScreen> {
           context: context,
           builder: (context) => StatefulBuilder(
             builder: (context, setStateDialog) => AlertDialog(
+              backgroundColor: cardSurface, // New Color
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16)),
               title: Row(
-                children: const [
-                  Icon(Icons.info_outline, color: Color(0xFF3F51B5)),
-                  SizedBox(width: 8),
-                  Text("Slot Details"),
+                children: [
+                  const Icon(Icons.info_outline,
+                      color: markerColor), // New Color
+                  const SizedBox(width: 8),
+                  Text(
+                    "Slot Details",
+                    style: GoogleFonts.poppins(color: primaryText), // New Style
+                  ),
                 ],
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Phone: ${booking['phone']}'),
-                  Text('Vehicle Number: ${booking['number_plate']}'),
-                  Text('Entry Time: ${booking['entry_time']}'),
+                  Text('Phone: ${booking['phone']}',
+                      style: GoogleFonts.poppins(
+                          color: secondaryText)), // New Style
+                  Text('Vehicle Number: ${booking['number_plate']}',
+                      style: GoogleFonts.poppins(
+                          color: secondaryText)), // New Style
+                  Text('Entry Time: ${booking['entry_time']}',
+                      style: GoogleFonts.poppins(
+                          color: secondaryText)), // New Style
                   if (calculatedAmount != null)
-                    Text('Amount: ₹$calculatedAmount'),
+                    Text('Amount: ₹$calculatedAmount',
+                        style: GoogleFonts.poppins(
+                            color: primaryText,
+                            fontWeight: FontWeight.bold)), // New Style
                 ],
               ),
               actions: [
@@ -257,21 +287,27 @@ class _HomeScreenState extends State<HomeScreen> {
                       calculatedAmount = secondsDifference;
                     });
                   },
-                  child: const Text('Calculate Now',
-                      style: TextStyle(color: Color(0xFF3F51B5))),
+                  child: Text('Calculate Now',
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          color: primaryText)), // New Style
                 ),
                 if (calculatedAmount != null)
                   TextButton(
                     onPressed: () {
                       _onPayButtonPressed(slot, calculatedAmount, exitTime);
                     },
-                    child: const Text('Pay with Razorpay',
-                        style: TextStyle(color: Color(0xFF3F51B5))),
+                    child: Text('Pay with Razorpay',
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            color: primaryText)), // New Style
                   ),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Close',
-                      style: TextStyle(color: Color(0xFF3F51B5))),
+                  child: Text('Close',
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          color: primaryText)), // New Style
                 ),
               ],
             ),
@@ -302,30 +338,47 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) {
         final vehicleNumberController = TextEditingController();
         return AlertDialog(
+          backgroundColor: cardSurface, // New Color
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
-            children: const [
-              Icon(Icons.directions_car, color: Color(0xFF3F51B5)),
-              SizedBox(width: 8),
-              Text("Book Slot"),
+            children: [
+              const Icon(Icons.directions_car, color: markerColor), // New Color
+              const SizedBox(width: 8),
+              Text("Book Slot",
+                  style: GoogleFonts.poppins(color: primaryText)), // New Style
             ],
           ),
           content: TextField(
             controller: vehicleNumberController,
+            style: GoogleFonts.poppins(color: primaryText), // New Style
             decoration: InputDecoration(
               labelText: _vehicleType == 'car'
                   ? 'Car Number Plate'
                   : 'Bike Number Plate',
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              labelStyle: GoogleFonts.poppins(color: hintText), // New Style
+              border: OutlineInputBorder(
+                // New Style
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                // New Style
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                // New Style
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
               prefixIcon: Icon(
                   _vehicleType == 'car'
                       ? Icons.directions_car
                       : Icons.motorcycle,
-                  color: const Color(0xFF3F51B5)),
+                  color: hintText), // New Color
               filled: true,
-              fillColor: Colors.grey[100],
+              fillColor: infoItemBg, // New Color
             ),
           ),
           actions: [
@@ -371,8 +424,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   _showErrorDialog('Error booking slot: $e');
                 }
               },
-              child: const Text('Book',
-                  style: TextStyle(color: Color(0xFF3F51B5))),
+              child: Text('Book',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      color: primaryText)), // New Style
             ),
           ],
         );
@@ -384,19 +439,25 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: cardSurface, // New Color
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
-          children: const [
-            Icon(Icons.error_outline, color: Colors.red),
-            SizedBox(width: 8),
-            Text("Error"),
+          children: [
+            const Icon(Icons.error_outline, color: errorRed), // New Color
+            const SizedBox(width: 8),
+            Text("Error",
+                style: GoogleFonts.poppins(color: primaryText)), // New Style
           ],
         ),
-        content: Text(message),
+        content: Text(message,
+            style: GoogleFonts.poppins(color: secondaryText)), // New Style
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("OK", style: TextStyle(color: Color(0xFF3F51B5))),
+            child: Text("OK",
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    color: primaryText)), // New Style
           ),
         ],
       ),
@@ -406,14 +467,17 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: appBackground, // New Color
       appBar: AppBar(
-        title: Text(widget.parkingAreaName),
+        title: Text(
+          widget.parkingAreaName,
+          style: GoogleFonts.poppins(color: primaryText), // New Style
+        ),
         elevation: 0,
-        backgroundColor: const Color(0xFF3F51B5),
+        backgroundColor: appBarColor, // New Color
         actions: [
           IconButton(
-            icon: const Icon(Icons.person, color: Colors.white),
+            icon: const Icon(Icons.person, color: primaryText), // New Color
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -429,7 +493,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
-                color: Color(0xFF3F51B5),
+                color: appBarColor, // New Color
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(30),
                   bottomRight: Radius.circular(30),
@@ -440,8 +504,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     widget.parkingAreaName,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: GoogleFonts.poppins(
+                      // New Style
+                      color: primaryText,
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
                     ),
@@ -449,8 +514,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 8),
                   Text(
                     "Manage your parking slots",
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.85),
+                    style: GoogleFonts.poppins(
+                      // New Style
+                      color: secondaryText,
                       fontSize: 14,
                     ),
                   ),
@@ -477,11 +543,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: cardSurface, // New Color
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          // New Shadow
+                          color: shadow,
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -489,36 +556,48 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: DropdownButtonFormField<String>(
                       decoration: InputDecoration(
+                        // New Style
                         labelText: "Select Vehicle Type",
-                        labelStyle: const TextStyle(color: Color(0xFF3F51B5)),
+                        labelStyle: GoogleFonts.poppins(color: hintText),
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
+                          borderSide: BorderSide.none,
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              const BorderSide(color: Color(0xFF3F51B5)),
+                          borderSide: BorderSide.none,
                         ),
-                        prefixIcon: const Icon(Icons.directions_car,
-                            color: Color(0xFF3F51B5)),
+                        prefixIcon:
+                            const Icon(Icons.directions_car, color: hintText),
                         filled: true,
-                        fillColor: Colors.white,
+                        fillColor: infoItemBg, // New Color
                       ),
+                      style:
+                          GoogleFonts.poppins(color: primaryText), // New Style
                       value: _vehicleType,
-                      items: const [
-                        DropdownMenuItem(value: 'car', child: Text('Car')),
-                        DropdownMenuItem(value: 'bike', child: Text('Bike')),
+                      items: [
+                        DropdownMenuItem(
+                            value: 'car',
+                            child: Text('Car',
+                                style: GoogleFonts.poppins(
+                                    color: primaryText))), // New Style
+                        DropdownMenuItem(
+                            value: 'bike',
+                            child: Text('Bike',
+                                style: GoogleFonts.poppins(
+                                    color: primaryText))), // New Style
                       ],
                       onChanged: (value) {
                         setState(() => _vehicleType = value!);
                         _fetchSlots();
                       },
-                      dropdownColor: Colors.white,
+                      dropdownColor: cardSurface, // New Color
                       icon: const Icon(Icons.arrow_drop_down,
-                          color: Color(0xFF3F51B5)),
+                          color: hintText), // New Color
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -527,11 +606,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: cardSurface, // New Color
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          // New Shadow
+                          color: shadow,
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -543,18 +623,25 @@ class _HomeScreenState extends State<HomeScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            _buildLegendItem(Colors.grey[300]!, "Available"),
-                            _buildLegendItem(const Color(0xFF4CAF50), "Booked"),
-                            _buildLegendItem(Colors.red[300]!, "Booked"),
+                            _buildLegendItem(const Color(0xFF4CAF50),
+                                "Available"), // Fixed Legend
+                            _buildLegendItem(
+                                errorRed, "Booked"), // Fixed Legend
                           ],
                         ),
                         const SizedBox(height: 20),
                         _isLoading
-                            ? const Center(child: CircularProgressIndicator())
+                            ? const Center(
+                                child: CircularProgressIndicator(
+                                color: markerColor, // New Color
+                              ))
                             : _slots.isEmpty
-                                ? const Center(
+                                ? Center(
                                     child: Text(
-                                        "No slots available. Update parking area in Profile."))
+                                    "No slots available. Update parking area in Profile.",
+                                    style: GoogleFonts.poppins(
+                                        color: secondaryText), // New Style
+                                  ))
                                 : Wrap(
                                     spacing: 10.0,
                                     runSpacing: 10.0,
@@ -575,7 +662,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           height: 65,
                                           decoration: BoxDecoration(
                                             color: isBooked
-                                                ? Colors.red[300]
+                                                ? errorRed // New Color
                                                 : const Color(0xFF4CAF50),
                                             borderRadius:
                                                 BorderRadius.circular(12),
@@ -584,7 +671,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                                     BoxShadow(
                                                       color: const Color(
                                                               0xFF4CAF50)
-                                                          .withOpacity(0.4),
+                                                          .withOpacity(
+                                                              0.3), // New Shadow
                                                       blurRadius: 8,
                                                       offset:
                                                           const Offset(0, 2),
@@ -595,8 +683,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                           child: Center(
                                             child: Text(
                                               "$slotNumber",
-                                              style: TextStyle(
-                                                color: Colors.white,
+                                              style: GoogleFonts.poppins(
+                                                // New Style
+                                                color: primaryText,
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 16,
                                               ),
@@ -625,17 +714,18 @@ class _HomeScreenState extends State<HomeScreen> {
           width: 4,
           height: 20,
           decoration: BoxDecoration(
-            color: const Color(0xFF3F51B5),
+            color: markerColor, // New Color
             borderRadius: BorderRadius.circular(2),
           ),
         ),
         const SizedBox(width: 8),
         Text(
           title,
-          style: const TextStyle(
+          style: GoogleFonts.poppins(
+            // New Style
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF303030),
+            color: primaryText,
           ),
         ),
       ],
@@ -656,7 +746,8 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(width: 6),
         Text(
           label,
-          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          style: GoogleFonts.poppins(
+              fontSize: 12, color: secondaryText), // New Style
         ),
       ],
     );
@@ -667,28 +758,31 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
+        color: cardSurface, // New Color
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: Colors.white),
+          Icon(icon, size: 20, color: primaryText), // New Color
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 "$available / ${available + booked}",
-                style: const TextStyle(
+                style: GoogleFonts.poppins(
+                  // New Style
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: primaryText,
                 ),
               ),
               Text(
                 "$label (Avail/Total)",
-                style: TextStyle(
-                    fontSize: 12, color: Colors.white.withOpacity(0.85)),
+                style: GoogleFonts.poppins(
+                    // New Style
+                    fontSize: 12,
+                    color: secondaryText),
               ),
             ],
           ),

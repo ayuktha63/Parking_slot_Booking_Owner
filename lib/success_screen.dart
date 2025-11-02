@@ -1,5 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart'; // Import Google Fonts
 import 'package:lottie/lottie.dart';
+
+// --- NEW DESIGN SYSTEM COLORS ---
+const Color appBackground = Color(0xFF1C1C1E);
+const Color cardSurface = Color(0xFF2C2C2E);
+const Color appBarColor = Color(0xFF1C1C1E);
+const Color infoItemBg = Color(0xFF3A3A3C);
+const Color primaryText = Color(0xFFFFFFFF);
+const Color secondaryText = Color(0xFFB0B0B5);
+const Color hintText = Color(0xFF8E8E93);
+const Color darkText = Color(0xFF000000);
+const Color markerColor = Color.fromARGB(255, 215, 215, 215); // Accent
+const Color elevatedButtonBg = Color(0xFFFFFFFF);
+const Color errorRed = Color(0xFFD32F2F);
+final Color shadow = Color.fromRGBO(0, 0, 0, 0.3);
+// --- END NEW DESIGN SYSTEM COLORS ---
 
 class SuccessScreen extends StatelessWidget {
   final Map<String, dynamic> receipt;
@@ -11,15 +27,16 @@ class SuccessScreen extends StatelessWidget {
     final isPayment = receipt['amount'] != null;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: appBackground, // New Color
       body: SingleChildScrollView(
         child: Column(
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(
+                  24, 60, 24, 24), // Add padding for status bar
               decoration: const BoxDecoration(
-                color: Color(0xFF3F51B5),
+                color: appBarColor, // New Color
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(30),
                   bottomRight: Radius.circular(30),
@@ -30,8 +47,9 @@ class SuccessScreen extends StatelessWidget {
                 children: [
                   Text(
                     isPayment ? "Payment Successful!" : "Booking Confirmed!",
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: GoogleFonts.poppins(
+                      // New Style
+                      color: primaryText,
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
                     ),
@@ -41,8 +59,9 @@ class SuccessScreen extends StatelessWidget {
                     isPayment
                         ? "Your payment has been processed"
                         : "Your parking slot is reserved",
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.85),
+                    style: GoogleFonts.poppins(
+                      // New Style
+                      color: secondaryText,
                       fontSize: 14,
                     ),
                   ),
@@ -56,20 +75,22 @@ class SuccessScreen extends StatelessWidget {
                 children: [
                   const SizedBox(height: 20),
                   Lottie.asset(
-                    'assets/lottie/success.json',
+                    'assets/lottie/success.json', // Make sure this asset is in your pubspec.yaml
                     width: 200,
                     height: 200,
                     fit: BoxFit.contain,
                   ),
                   const SizedBox(height: 20),
                   Container(
+                    width: double.infinity, // Ensure card takes full width
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: cardSurface, // New Color
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          // New Shadow
+                          color: shadow,
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -117,18 +138,21 @@ class SuccessScreen extends StatelessWidget {
                     width: double.infinity,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
+                        // New Style
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: const Color(0xFF3F51B5),
+                        backgroundColor: elevatedButtonBg,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
                       onPressed: () => Navigator.pop(context),
-                      child: const Text(
+                      child: Text(
                         "Back to Home",
-                        style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white),
+                        style: GoogleFonts.poppins(
+                          // New Style
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: darkText,
+                        ),
                       ),
                     ),
                   ),
@@ -148,17 +172,18 @@ class SuccessScreen extends StatelessWidget {
           width: 4,
           height: 20,
           decoration: BoxDecoration(
-            color: const Color(0xFF3F51B5),
+            color: markerColor, // New Color
             borderRadius: BorderRadius.circular(2),
           ),
         ),
         const SizedBox(width: 8),
         Text(
           title,
-          style: const TextStyle(
+          style: GoogleFonts.poppins(
+            // New Style
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF303030),
+            color: primaryText,
           ),
         ),
       ],
@@ -171,10 +196,10 @@ class SuccessScreen extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: const Color(0xFF3F51B5).withOpacity(0.1),
+            color: infoItemBg, // New Color
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, color: const Color(0xFF3F51B5)),
+          child: Icon(icon, color: markerColor), // New Color
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -183,13 +208,19 @@ class SuccessScreen extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                style: GoogleFonts.poppins(
+                    // New Style
+                    fontSize: 14,
+                    color: secondaryText),
               ),
               const SizedBox(height: 4),
               Text(
                 value,
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: GoogleFonts.poppins(
+                    // New Style
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: primaryText),
               ),
             ],
           ),

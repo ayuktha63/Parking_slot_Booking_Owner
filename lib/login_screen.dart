@@ -61,11 +61,11 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: const Color(0xFF1C1C1E), // appBackground
       appBar: AppBar(
         title: const Text("Login"),
         elevation: 0,
-        backgroundColor: const Color(0xFF3F51B5),
+        backgroundColor: const Color(0xFF1C1C1E), // appBarColor
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -74,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
-                color: Color(0xFF3F51B5),
+                color: Color(0xFF1C1C1E), // Matches appBarColor
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(30),
                   bottomRight: Radius.circular(30),
@@ -86,7 +86,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const Text(
                     "Welcome Back",
                     style: TextStyle(
-                      color: Colors.white,
+                      color: Color(0xFFFFFFFF), // primaryText
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
                     ),
@@ -95,7 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Text(
                     "Sign in to manage your parking area",
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.85),
+                      color: const Color(0xFFB0B0B5), // secondaryText
                       fontSize: 14,
                     ),
                   ),
@@ -112,11 +112,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: const Color(0xFF2C2C2E), // cardSurface
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: const Color.fromRGBO(0, 0, 0, 0.3), // shadow
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -147,7 +147,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: const Color(0xFF3F51B5),
+                        backgroundColor:
+                            const Color(0xFFFFFFFF), // elevatedButtonBg
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
@@ -155,7 +156,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: const Text(
                         "Login",
                         style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF000000)), // darkText
                       ),
                     ),
                   ),
@@ -165,14 +168,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       const Text(
                         "Don't have an account? ",
-                        style: TextStyle(color: Colors.grey),
+                        style: TextStyle(color: Color(0xFF8E8E93)), // hintText
                       ),
                       TextButton(
                         onPressed: _navigateToRegister,
                         child: const Text(
                           "Register",
                           style: TextStyle(
-                            color: Color(0xFF3F51B5),
+                            color: Color(0xFFFFFFFF), // primaryText
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -185,8 +188,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: TextStyle(
                       color: _message.contains('Error') ||
                               _message.contains('required')
-                          ? Colors.red
-                          : Colors.green,
+                          ? const Color(0xFFD32F2F) // errorRed
+                          : const Color(0xFFFFFFFF), // success text as white
                       fontSize: 14,
                     ),
                   ),
@@ -206,7 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
           width: 4,
           height: 20,
           decoration: BoxDecoration(
-            color: const Color(0xFF3F51B5),
+            color: const Color.fromARGB(255, 215, 215, 215), // markerColor
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -216,7 +219,7 @@ class _LoginScreenState extends State<LoginScreen> {
           style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF303030),
+            color: Color(0xFFFFFFFF), // primaryText
           ),
         ),
       ],
@@ -234,21 +237,24 @@ class _LoginScreenState extends State<LoginScreen> {
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscureText,
+      style: const TextStyle(color: Color(0xFFFFFFFF)), // primaryText
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Color(0xFF3F51B5)),
+        labelStyle: const TextStyle(color: Color(0xFF8E8E93)), // hintText
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey[300]!),
+          borderSide: BorderSide(color: const Color(0xFF3A3A3C)), // infoItemBg
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF3F51B5)),
+          borderSide: const BorderSide(
+              color: Color.fromARGB(255, 215, 215, 215)), // markerColor
         ),
-        prefixIcon: Icon(icon, color: const Color(0xFF3F51B5)),
+        prefixIcon: Icon(icon,
+            color: const Color.fromARGB(255, 215, 215, 215)), // markerColor
         filled: true,
-        fillColor: Colors.grey[100],
+        fillColor: const Color(0xFF3A3A3C), // infoItemBg
       ),
     );
   }
