@@ -36,7 +36,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   static const String RAZORPAY_KEY = 'rzp_live_R6QQALUuJwgDaD';
-  String apiHost = 'localhost';
+  String apiHost = 'backend-parking-bk8y.onrender.com';
 
   Razorpay? _razorpay; // Made nullable
   String _vehicleType = 'car';
@@ -57,11 +57,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     if (kIsWeb) {
       apiHost = '127.0.0.1';
-    } else if (Platform.isAndroid) {
-      apiHost = '10.0.2.2';
-    } else {
-      // Handle other platforms if necessary, or keep default
-      apiHost = '10.0.2.2'; // Default for emulators
     }
 
     _fetchSlots();
@@ -83,8 +78,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _fetchSlots() async {
     setState(() => _isLoading = true);
     try {
-      final parkingResponse = await http
-          .get(Uri.parse('http://$apiHost:4000/api/owner/parking_areas'));
+      final parkingResponse =
+          await http.get(Uri.parse('https://$apiHost/api/owner/parking_areas'));
       final parkingAreas = jsonDecode(parkingResponse.body);
       final parkingArea = parkingAreas.firstWhere(
         (area) => area['name'] == widget.parkingAreaName,
@@ -103,14 +98,14 @@ class _HomeScreenState extends State<HomeScreen> {
       final parkingId = parkingArea['_id'];
       final slotsResponse = await http.get(
         Uri.parse(
-            'http://$apiHost:4000/api/owner/parking_areas/$parkingId/slots?vehicle_type=$_vehicleType'),
+            'https://$apiHost/api/owner/parking_areas/$parkingId/slots?vehicle_type=$_vehicleType'),
       );
       final slots = jsonDecode(slotsResponse.body);
 
       final allCarSlotsResponse = await http.get(Uri.parse(
-          'http://$apiHost:4000/api/owner/parking_areas/$parkingId/slots?vehicle_type=car'));
+          'https://$apiHost/api/owner/parking_areas/$parkingId/slots?vehicle_type=car'));
       final allBikeSlotsResponse = await http.get(Uri.parse(
-          'http://$apiHost:4000/api/owner/parking_areas/$parkingId/slots?vehicle_type=bike'));
+          'https://$apiHost/api/owner/parking_areas/$parkingId/slots?vehicle_type=bike'));
 
       final allCarSlots = jsonDecode(allCarSlotsResponse.body);
       final allBikeSlots = jsonDecode(allBikeSlotsResponse.body);
@@ -185,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final completeResponse = await http.post(
-        Uri.parse('http://$apiHost:4000/api/owner/bookings/complete'),
+        Uri.parse('https://$apiHost/api/owner/bookings/complete'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'slot_id': booking['slot_id'],
@@ -235,8 +230,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showBookedDetails(dynamic slot) async {
     try {
       final bookingResponse = await http.get(
-        Uri.parse(
-            'http://$apiHost:4000/api/owner/bookings?slot_id=${slot['_id']}'),
+        Uri.parse('https://$apiHost/api/owner/bookings?slot_id=${slot['_id']}'),
       );
       final bookings = jsonDecode(bookingResponse.body);
       if (bookings.isEmpty) return;
@@ -402,7 +396,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
                 try {
                   final response = await http.post(
-                    Uri.parse('http://$apiHost:4000/api/owner/bookings'),
+                    Uri.parse('https://$apiHost/api/owner/bookings'),
                     headers: {'Content-Type': 'application/json'},
                     body: jsonEncode({
                       'parking_id': _parkingId,

@@ -41,7 +41,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int? _totalBikeSlots;
   String? _parkingAreaName;
   bool _isLoading = true;
-  String apiHost = 'localhost'; // API Host variable
+  String apiHost = 'backend-parking-bk8y.onrender.com'; // API Host variable
 
   @override
   void initState() {
@@ -49,8 +49,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Set API host based on platform
     if (kIsWeb) {
       apiHost = '127.0.0.1';
-    } else if (Platform.isAndroid) {
-      apiHost = '10.0.2.2';
     }
     _fetchParkingAreaDetails();
   }
@@ -60,7 +58,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       // First, fetch the owner's details to get the associated parking area name
       final userResponse = await http.post(
-        Uri.parse('http://$apiHost:4000/api/owner/login'), // Use apiHost
+        Uri.parse('https://$apiHost/api/owner/login'), // Use apiHost
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'phone': widget.phone,
@@ -72,7 +70,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (parkingAreaName != null) {
         // Then, fetch the parking area details using the correct parking area name
         final parkingResponse = await http.get(Uri.parse(
-            'http://$apiHost:4000/api/owner/parking_areas')); // Use apiHost
+            'https://$apiHost/api/owner/parking_areas')); // Use apiHost
         final parkingAreas = jsonDecode(parkingResponse.body);
         final parkingArea = parkingAreas.firstWhere(
           (area) => area['name'] == parkingAreaName, // Corrected logic
@@ -147,8 +145,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
 
       final response = await http.post(
-        Uri.parse(
-            'http://$apiHost:4000/api/owner/parking_areas'), // Use apiHost
+        Uri.parse('https://$apiHost/api/owner/parking_areas'), // Use apiHost
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'name': widget.phone, // Owner's phone to identify the user

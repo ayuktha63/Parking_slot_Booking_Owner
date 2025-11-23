@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'register_screen.dart';
 import 'home_screen.dart';
 
+String apiHost = 'backend-parking-bk8y.onrender.com';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -24,7 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       final response = await http.post(
-        Uri.parse('http://localhost:4000/api/owner/login'),
+        Uri.parse('https://$apiHost/api/owner/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'phone': _phoneController.text,

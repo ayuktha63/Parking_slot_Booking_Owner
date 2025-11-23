@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+String apiHost = 'backend-parking-bk8y.onrender.com';
+
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -25,7 +27,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
 
       final response = await http.post(
-        Uri.parse('http://localhost:4000/api/owner/register'),
+        Uri.parse('https://$apiHost/api/owner/register'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'phone': _phoneController.text,
