@@ -3,10 +3,9 @@ import 'package:google_fonts/google_fonts.dart'; // Import Google Fonts
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb; // Import for web check
-import 'dart:io' show Platform; // Import for platform checks
-import 'login_screen.dart';
+import 'login_screen.dart'; // Assuming this is the Owner Login Screen
 
-// --- NEW DESIGN SYSTEM COLORS ---
+// --- DESIGN SYSTEM COLORS (Dark Mode) ---
 const Color appBackground = Color(0xFF1C1C1E);
 const Color cardSurface = Color(0xFF2C2C2E);
 const Color appBarColor = Color(0xFF1C1C1E);
@@ -15,11 +14,11 @@ const Color primaryText = Color(0xFFFFFFFF);
 const Color secondaryText = Color(0xFFB0B0B5);
 const Color hintText = Color(0xFF8E8E93);
 const Color darkText = Color(0xFF000000);
-const Color markerColor = Color.fromARGB(255, 215, 215, 215); // Accent
+const Color markerColor = Color(0xFF0A84FF); // Blue Accent
 const Color elevatedButtonBg = Color(0xFFFFFFFF);
 const Color errorRed = Color(0xFFD32F2F);
 final Color shadow = Color.fromRGBO(0, 0, 0, 0.3);
-// --- END NEW DESIGN SYSTEM COLORS ---
+// --- END DESIGN SYSTEM COLORS ---
 
 class ProfileScreen extends StatefulWidget {
   final String phone;
@@ -41,14 +40,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int? _totalBikeSlots;
   String? _parkingAreaName;
   bool _isLoading = true;
-  String apiHost = 'backend-parking-bk8y.onrender.com'; // API Host variable
+
+  String apiHost = 'backend-parking-bk8y.onrender.com';
+  String apiScheme = 'https';
 
   @override
   void initState() {
     super.initState();
     // Set API host based on platform
-    if (kIsWeb) {
-      apiHost = '127.0.0.1';
+    if (kIsWeb &&
+        (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1')) {
+      apiHost = '127.0.0.1:3000';
+      apiScheme = 'http';
     }
     _fetchParkingAreaDetails();
   }
@@ -56,24 +59,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _fetchParkingAreaDetails() async {
     setState(() => _isLoading = true);
     try {
-      // First, fetch the owner's details to get the associated parking area name
+      // 1. Fetch the owner's details to get the associated parking area name
       final userResponse = await http.post(
-        Uri.parse('https://$apiHost/api/owner/login'), // Use apiHost
+        Uri.parse('$apiScheme://$apiHost/api/owner/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'phone': widget.phone,
         }),
       );
+
+      if (userResponse.statusCode != 200) {
+        throw Exception("Failed to verify owner credentials.");
+      }
+
       final userData = jsonDecode(userResponse.body);
       final parkingAreaName = userData['parking_area_name'];
 
       if (parkingAreaName != null) {
-        // Then, fetch the parking area details using the correct parking area name
-        final parkingResponse = await http.get(Uri.parse(
-            'https://$apiHost/api/owner/parking_areas')); // Use apiHost
+        // 2. Fetch all parking areas
+        final parkingResponse = await http
+            .get(Uri.parse('$apiScheme://$apiHost/api/owner/parking_areas'));
+
+        if (parkingResponse.statusCode != 200) {
+          throw Exception("Failed to fetch parking area list.");
+        }
+
         final parkingAreas = jsonDecode(parkingResponse.body);
+
+        // 3. Find the specific parking area matching the owner's linked name
         final parkingArea = parkingAreas.firstWhere(
-          (area) => area['name'] == parkingAreaName, // Corrected logic
+          (area) => area['name'] == parkingAreaName,
           orElse: () => null,
         );
 
@@ -81,17 +96,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _parkingAreaName = parkingAreaName;
           _nameController.text = parkingAreaName;
           if (parkingArea != null) {
-            _latController.text = parkingArea['location']['lat'].toString();
-            _lngController.text = parkingArea['location']['lng'].toString();
+            _latController.text =
+                parkingArea['location']['lat']?.toString() ?? '';
+            _lngController.text =
+                parkingArea['location']['lng']?.toString() ?? '';
             _carSlotsController.text =
-                parkingArea['total_car_slots'].toString();
+                parkingArea['total_car_slots']?.toString() ?? '0';
             _bikeSlotsController.text =
-                parkingArea['total_bike_slots'].toString();
+                parkingArea['total_bike_slots']?.toString() ?? '0';
             _totalCarSlots = parkingArea['total_car_slots'];
             _totalBikeSlots = parkingArea['total_bike_slots'];
             _message = 'Current parking area details loaded';
           } else {
-            _message = 'Parking area profile not found. Please update.';
+            _message =
+                'Parking area profile not found. Please set capacity/location.';
           }
         });
       } else {
@@ -101,8 +119,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         });
       }
     } catch (e) {
+      print('Error fetching details: $e');
       setState(() {
-        _message = 'Error fetching details: $e';
+        _message = 'Error fetching details: ${e.toString()}';
       });
     } finally {
       setState(() {
@@ -112,40 +131,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _updateParkingArea() async {
+    // Basic validation
+    if (_nameController.text.isEmpty ||
+        _latController.text.isEmpty ||
+        _lngController.text.isEmpty ||
+        _carSlotsController.text.isEmpty ||
+        _bikeSlotsController.text.isEmpty) {
+      setState(() => _message = 'All fields are required');
+      _showErrorDialog('All fields are required');
+      return;
+    }
+
+    double? lat = double.tryParse(_latController.text);
+    double? lng = double.tryParse(_lngController.text);
+    int? carSlots = int.tryParse(_carSlotsController.text);
+    int? bikeSlots = int.tryParse(_bikeSlotsController.text);
+
+    if (lat == null ||
+        lng == null ||
+        carSlots == null ||
+        bikeSlots == null ||
+        carSlots < 0 ||
+        bikeSlots < 0) {
+      setState(() => _message = 'Invalid input for coordinates or slots.');
+      _showErrorDialog(
+          'Invalid input for coordinates or slots (must be non-negative numbers).');
+      return;
+    }
+
+    // Warn owner about Hybrid Model slot reset on capacity change
+    bool capacityChanged =
+        carSlots != _totalCarSlots || bikeSlots != _totalBikeSlots;
+    if (capacityChanged) {
+      bool? confirm = await _showConfirmationDialog("Capacity Change Detected",
+          "Changing the total number of slots will reset all active bookings and available slots for this parking area (Hybrid Model reset). Are you sure you want to proceed?");
+      if (confirm != true) {
+        setState(() => _message = "Update cancelled by user.");
+        return;
+      }
+    }
+
     try {
-      if (_nameController.text.isEmpty ||
-          _latController.text.isEmpty ||
-          _lngController.text.isEmpty ||
-          _carSlotsController.text.isEmpty ||
-          _bikeSlotsController.text.isEmpty) {
-        setState(() => _message = 'All fields are required');
-        _showErrorDialog('All fields are required');
-        return;
-      }
-
-      double? lat = double.tryParse(_latController.text);
-      double? lng = double.tryParse(_lngController.text);
-      int? carSlots = int.tryParse(_carSlotsController.text);
-      int? bikeSlots = int.tryParse(_bikeSlotsController.text);
-
-      if (lat == null || lng == null) {
-        setState(() => _message = 'Invalid latitude or longitude');
-        _showErrorDialog('Invalid latitude or longitude');
-        return;
-      }
-      if (carSlots == null ||
-          bikeSlots == null ||
-          carSlots < 0 ||
-          bikeSlots < 0) {
-        setState(() =>
-            _message = 'Invalid slot numbers (must be non-negative integers)');
-        _showErrorDialog(
-            'Invalid slot numbers (must be non-negative integers)');
-        return;
-      }
-
+      setState(() => _isLoading = true);
       final response = await http.post(
-        Uri.parse('https://$apiHost/api/owner/parking_areas'), // Use apiHost
+        Uri.parse('$apiScheme://$apiHost/api/owner/parking_areas'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'name': widget.phone, // Owner's phone to identify the user
@@ -157,12 +186,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
 
       final data = jsonDecode(response.body);
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         setState(() {
           _message = data['message'] ?? 'Parking area updated successfully';
-          _parkingAreaName = _nameController.text;
-          _totalCarSlots = carSlots;
-          _totalBikeSlots = bikeSlots;
         });
         // Re-fetch details to ensure full sync with the backend
         _fetchParkingAreaDetails();
@@ -171,9 +197,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _showErrorDialog(data['message'] ?? 'Failed to update');
       }
     } catch (e) {
+      print('Error updating parking area: $e');
       setState(() => _message = 'Error: $e');
       _showErrorDialog('Error: $e');
     }
+  }
+
+  Future<bool?> _showConfirmationDialog(String title, String content) async {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: cardSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title, style: GoogleFonts.poppins(color: errorRed)),
+        content:
+            Text(content, style: GoogleFonts.poppins(color: secondaryText)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child:
+                Text("Cancel", style: GoogleFonts.poppins(color: primaryText)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text("Confirm Reset",
+                style: GoogleFonts.poppins(
+                    color: errorRed, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _logout() {
@@ -222,8 +275,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: GoogleFonts.poppins(color: primaryText)), // New Style
         elevation: 0,
         backgroundColor: appBarColor, // New Color
-        iconTheme:
-            IconThemeData(color: primaryText), // Ensure back button is white
+        iconTheme: const IconThemeData(
+            color: primaryText), // Ensure back button is white
       ),
       body: _isLoading
           ? const Center(
@@ -312,16 +365,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 controller: _latController,
                                 label: "Latitude",
                                 icon: Icons.location_on,
-                                keyboardType: TextInputType.numberWithOptions(
-                                    decimal: true, signed: true),
+                                keyboardType: TextInputType.number,
                               ),
                               const SizedBox(height: 16),
                               _buildTextField(
                                 controller: _lngController,
                                 label: "Longitude",
                                 icon: Icons.location_on,
-                                keyboardType: TextInputType.numberWithOptions(
-                                    decimal: true, signed: true),
+                                keyboardType: TextInputType.number,
                               ),
                               const SizedBox(height: 16),
                               _buildTextField(
@@ -368,7 +419,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           style: GoogleFonts.poppins(
                             // New Style
                             color: _message.contains('Error') ||
-                                    _message.contains('Invalid')
+                                    _message.contains('Invalid') ||
+                                    _message.contains('Failed')
                                 ? errorRed // Use errorRed
                                 : Colors.green, // Success color
                             fontSize: 14,

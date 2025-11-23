@@ -7,8 +7,9 @@ import 'package:flutter/foundation.dart' show kIsWeb; // Import for web check
 import 'profile_screen.dart';
 import 'success_screen.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:intl/intl.dart'; // Import for date formatting
 
-// --- NEW DESIGN SYSTEM COLORS ---
+// --- DESIGN SYSTEM COLORS (Dark Mode) ---
 const Color appBackground = Color(0xFF1C1C1E);
 const Color cardSurface = Color(0xFF2C2C2E);
 const Color appBarColor = Color(0xFF1C1C1E);
@@ -17,10 +18,11 @@ const Color primaryText = Color(0xFFFFFFFF);
 const Color secondaryText = Color(0xFFB0B0B5);
 const Color hintText = Color(0xFF8E8E93);
 const Color darkText = Color(0xFF000000);
-const Color markerColor = Color.fromARGB(255, 215, 215, 215); // Accent
+const Color markerColor = Color(0xFF0A84FF); // Blue Accent for active state
 const Color elevatedButtonBg = Color(0xFFFFFFFF);
 const Color errorRed = Color(0xFFD32F2F);
 final Color shadow = Color.fromRGBO(0, 0, 0, 0.3);
+
 // --- END NEW DESIGN SYSTEM COLORS ---
 
 class HomeScreen extends StatefulWidget {
@@ -37,8 +39,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   static const String RAZORPAY_KEY = 'rzp_live_R6QQALUuJwgDaD';
   String apiHost = 'backend-parking-bk8y.onrender.com';
+  String apiScheme = 'https';
 
-  Razorpay? _razorpay; // Made nullable
+  Razorpay? _razorpay;
   String _vehicleType = 'car';
   List<dynamic> _slots = [];
   String? _parkingId;
@@ -52,14 +55,21 @@ class _HomeScreenState extends State<HomeScreen> {
   int _availableBikeSlots = 0;
   int _bookedBikeSlots = 0;
 
+  // State to hold data for booking completion after successful payment
+  Map<String, dynamic>? _pendingCompletionData;
+
   @override
   void initState() {
     super.initState();
-    if (kIsWeb) {
-      apiHost = '127.0.0.1';
+    // Host setup
+    if (kIsWeb &&
+        (Uri.base.host == 'localhost' || Uri.base.host == '127.0.0.1')) {
+      apiHost = '127.0.0.1:3000';
+      apiScheme = 'http';
     }
 
     _fetchSlots();
+
     // Initialize Razorpay only on Android and iOS.
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
       _razorpay = Razorpay();
@@ -78,8 +88,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _fetchSlots() async {
     setState(() => _isLoading = true);
     try {
-      final parkingResponse =
-          await http.get(Uri.parse('https://$apiHost/api/owner/parking_areas'));
+      final parkingResponse = await http
+          .get(Uri.parse('$apiScheme://$apiHost/api/owner/parking_areas'));
       final parkingAreas = jsonDecode(parkingResponse.body);
       final parkingArea = parkingAreas.firstWhere(
         (area) => area['name'] == widget.parkingAreaName,
@@ -96,16 +106,19 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       final parkingId = parkingArea['_id'];
+
+      // Fetch slots for the current vehicle type
       final slotsResponse = await http.get(
         Uri.parse(
-            'https://$apiHost/api/owner/parking_areas/$parkingId/slots?vehicle_type=$_vehicleType'),
+            '$apiScheme://$apiHost/api/owner/parking_areas/$parkingId/slots?vehicle_type=$_vehicleType'),
       );
       final slots = jsonDecode(slotsResponse.body);
 
+      // Fetch ALL car and bike slots to get accurate counts (Hybrid Model)
       final allCarSlotsResponse = await http.get(Uri.parse(
-          'https://$apiHost/api/owner/parking_areas/$parkingId/slots?vehicle_type=car'));
+          '$apiScheme://$apiHost/api/owner/parking_areas/$parkingId/slots?vehicle_type=car'));
       final allBikeSlotsResponse = await http.get(Uri.parse(
-          'https://$apiHost/api/owner/parking_areas/$parkingId/slots?vehicle_type=bike'));
+          '$apiScheme://$apiHost/api/owner/parking_areas/$parkingId/slots?vehicle_type=bike'));
 
       final allCarSlots = jsonDecode(allCarSlotsResponse.body);
       final allBikeSlots = jsonDecode(allBikeSlotsResponse.body);
@@ -115,16 +128,17 @@ class _HomeScreenState extends State<HomeScreen> {
         _parkingId = parkingId;
         _isLoading = false;
 
-        _totalCarSlots = parkingArea['total_car_slots'];
+        _totalCarSlots = parkingArea['total_car_slots'] ?? 0;
         _availableCarSlots = allCarSlots.where((s) => !s['is_booked']).length;
         _bookedCarSlots = _totalCarSlots - _availableCarSlots;
 
-        _totalBikeSlots = parkingArea['total_bike_slots'];
+        _totalBikeSlots = parkingArea['total_bike_slots'] ?? 0;
         _availableBikeSlots = allBikeSlots.where((s) => !s['is_booked']).length;
         _bookedBikeSlots = _totalBikeSlots - _availableBikeSlots;
       });
     } catch (e) {
       print('Error fetching slots: $e');
+      _showErrorDialog('Error connecting to server. Please check host.');
       setState(() {
         _slots = [];
         _isLoading = false;
@@ -132,9 +146,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _openCheckout(
-      int amountInPaise, Map<String, dynamic> bookingDetails) async {
-    // Check if Razorpay is supported before trying to open it
+  // Helper to open Razorpay checkout (simplified)
+  void _openCheckout(int amountInPaise) async {
     if (_razorpay == null) {
       _showErrorDialog("Payment is only supported on Android and iOS devices.");
       return;
@@ -142,13 +155,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final options = <String, Object>{
       'key': RAZORPAY_KEY,
-      'amount': 100, // Hardcoded to 1 rupee (100 paise)
+      'amount': amountInPaise,
       'name': 'Parking Area Owner App',
-      'description': 'Payment for Parking Slot',
+      'description': 'Parking Exit Fee',
       'prefill': {'contact': widget.phone, 'email': 'owner@example.com'},
-      'external': {
-        'wallets': ['paytm']
-      }
     };
 
     try {
@@ -158,50 +168,47 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
-    _showErrorDialog("SUCCESS: ${response.paymentId}");
-
-    // Find a booked slot to 'complete'
-    final bookedSlot =
-        _slots.firstWhere((s) => s['is_booked'], orElse: () => null);
-    if (bookedSlot == null) {
-      _showErrorDialog("Error: No booked slot found to complete payment.");
-      return;
-    }
-
-    // Hardcoded booking details for testing
-    final Map<String, dynamic> booking = {
-      'slot_id': bookedSlot['_id'], // Use the found booked slot
-      'parking_id': _parkingId,
-      'vehicle_type': _vehicleType,
-      'exit_time': DateTime.now().toIso8601String(),
-      'amount': 1,
-    };
+  // New centralized function to complete the booking on the backend (Option B)
+  Future<void> _completeBookingOwner(
+      Map<String, dynamic> data, String? paymentId) async {
+    // Show progress dialog while completing
+    Navigator.pop(context); // Close the details dialog first
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) =>
+          const Center(child: CircularProgressIndicator(color: primaryText)),
+    );
 
     try {
       final completeResponse = await http.post(
-        Uri.parse('https://$apiHost/api/owner/bookings/complete'),
+        Uri.parse('$apiScheme://$apiHost/api/owner/bookings/complete'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'slot_id': booking['slot_id'],
-          'parking_id': booking['parking_id'],
-          'vehicle_type': booking['vehicle_type'],
-          'exit_time': booking['exit_time'],
-          'amount': booking['amount'],
+          // CRITICAL: Send booking_id (the active record's _id)
+          'booking_id': data['booking_id'],
+          'parking_id': data['parking_id'],
+          'vehicle_type': data['vehicle_type'],
+          'exit_time': data['exit_time'],
+          'amount': data['amount'],
+          'payment_id': paymentId,
         }),
       );
 
+      if (mounted) Navigator.pop(context); // Close progress dialog
+
       if (completeResponse.statusCode == 200) {
         final successReceipt = {
-          ...booking,
-          'slot_number': bookedSlot['slot_number'], // Use the found booked slot
-          'vehicle_number': "TEST-1234",
-          'entry_time': "TEST ENTRY TIME",
-          'date': DateTime.now().toIso8601String().split('T')[0],
+          // We have the minimal info needed for a simple success receipt
+          'slot_number': data['slot_number'],
+          'vehicle_number': data['vehicle_number'],
+          'entry_time': data['entry_time'],
+          'exit_time': data['exit_time'],
+          'amount': data['amount'],
           'parking_name': widget.parkingAreaName,
         };
+
         if (mounted) {
-          Navigator.pop(context); // Close the dialog
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -211,170 +218,199 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       } else {
         _showErrorDialog(
-            'Failed to complete booking: ${completeResponse.body}');
+            'Failed to complete booking: ${jsonDecode(completeResponse.body)['message'] ?? completeResponse.body}');
       }
     } catch (e) {
+      if (mounted) Navigator.pop(context); // Close progress dialog
       print('Error completing booking: $e');
       _showErrorDialog('Error completing booking: $e');
     }
   }
 
+  // --- UPDATED PAYMENT HANDLERS ---
+  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
+    if (_pendingCompletionData == null) {
+      _showErrorDialog(
+          "Payment succeeded but booking context was lost. Cannot complete booking.");
+      return;
+    }
+
+    // Use the stored context to call the completion API
+    await _completeBookingOwner(_pendingCompletionData!, response.paymentId);
+
+    _pendingCompletionData = null; // Clear state
+  }
+
   void _handlePaymentError(PaymentFailureResponse response) {
     _showErrorDialog("ERROR: ${response.code} - ${response.message}");
+    _pendingCompletionData = null; // Clear state on failure
   }
 
   void _handleExternalWallet(ExternalWalletResponse response) {
     _showErrorDialog("EXTERNAL WALLET: ${response.walletName}");
-  }
-
-  void _showBookedDetails(dynamic slot) async {
-    try {
-      final bookingResponse = await http.get(
-        Uri.parse('https://$apiHost/api/owner/bookings?slot_id=${slot['_id']}'),
-      );
-      final bookings = jsonDecode(bookingResponse.body);
-      if (bookings.isEmpty) return;
-
-      final booking = bookings.firstWhere(
-        (b) => b['slot_id'] == slot['_id'] && b['status'] == 'active',
-        orElse: () => null,
-      );
-
-      if (booking != null) {
-        int? calculatedAmount;
-        DateTime exitTime = DateTime.now();
-
-        showDialog(
-          context: context,
-          builder: (context) => StatefulBuilder(
-            builder: (context, setStateDialog) => AlertDialog(
-              backgroundColor: cardSurface, // New Color
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
-              title: Row(
-                children: [
-                  const Icon(Icons.info_outline,
-                      color: markerColor), // New Color
-                  const SizedBox(width: 8),
-                  Text(
-                    "Slot Details",
-                    style: GoogleFonts.poppins(color: primaryText), // New Style
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Phone: ${booking['phone']}',
-                      style: GoogleFonts.poppins(
-                          color: secondaryText)), // New Style
-                  Text('Vehicle Number: ${booking['number_plate']}',
-                      style: GoogleFonts.poppins(
-                          color: secondaryText)), // New Style
-                  Text('Entry Time: ${booking['entry_time']}',
-                      style: GoogleFonts.poppins(
-                          color: secondaryText)), // New Style
-                  if (calculatedAmount != null)
-                    Text('Amount: ₹$calculatedAmount',
-                        style: GoogleFonts.poppins(
-                            color: primaryText,
-                            fontWeight: FontWeight.bold)), // New Style
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    DateTime entryTime = DateTime.parse(booking['entry_time']);
-                    exitTime = DateTime.now();
-                    int secondsDifference =
-                        exitTime.difference(entryTime).inSeconds;
-                    setStateDialog(() {
-                      calculatedAmount = secondsDifference;
-                    });
-                  },
-                  child: Text('Calculate Now',
-                      style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.bold,
-                          color: primaryText)), // New Style
-                ),
-                if (calculatedAmount != null)
-                  TextButton(
-                    onPressed: () {
-                      _onPayButtonPressed(slot, calculatedAmount, exitTime);
-                    },
-                    child: Text('Pay with Razorpay',
-                        style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.bold,
-                            color: primaryText)), // New Style
-                  ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text('Close',
-                      style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.bold,
-                          color: primaryText)), // New Style
-                ),
-              ],
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      print('Error fetching booking details: $e');
-      _showErrorDialog('Error fetching slot details: $e');
-    }
+    _pendingCompletionData = null; // Clear state
   }
 
   // New function to handle the pay button press.
   void _onPayButtonPressed(
-      dynamic slot, int? calculatedAmount, DateTime exitTime) {
-    _openCheckout(100, {
-      'slot_id': slot['_id'],
-      'parking_id': slot['parking_id'],
-      'vehicle_type': _vehicleType,
+      dynamic booking, int? calculatedAmount, DateTime exitTime) {
+    // 1. Prepare completion data and store it in state
+    _pendingCompletionData = {
+      'booking_id': booking['_id'], // Active Booking ID
+      'parking_id': booking['parking_id'],
+      'slot_number': booking['slot_number'],
+      'vehicle_type': booking['vehicle_type'],
+      'vehicle_number': booking['number_plate'], // For receipt purposes
+      'entry_time': booking['entry_time'],
       'exit_time': exitTime.toIso8601String(),
       'amount': calculatedAmount,
-    });
-  }
+    };
 
+    // 2. Start Razorpay checkout
+    _openCheckout((calculatedAmount ?? 0) * 100); // Amount must be in paise
+  }
+  // --- END UPDATED PAYMENT HANDLERS ---
+
+  // --- UPDATED SLOT DETAIL FETCH ---
+  void _showBookedDetails(dynamic slot) async {
+    if (_parkingId == null) return;
+
+    // 1. Fetch active booking details using new query parameters
+    try {
+      final bookingResponse = await http.get(
+        Uri.parse(
+            '$apiScheme://$apiHost/api/owner/bookings?parking_id=$_parkingId&slot_number=${slot['slot_number']}&vehicle_type=${slot['vehicle_type']}'),
+      );
+
+      if (bookingResponse.statusCode != 200) {
+        _showErrorDialog('No active booking found for this slot.');
+        return;
+      }
+
+      final booking =
+          jsonDecode(bookingResponse.body); // Single active booking object
+
+      int? calculatedAmount;
+      DateTime entryTime = DateTime.parse(booking['entry_time']);
+      DateTime exitTime = DateTime.now();
+
+      showDialog(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setStateDialog) => AlertDialog(
+            backgroundColor: cardSurface,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                const Icon(Icons.info_outline, color: markerColor),
+                const SizedBox(width: 8),
+                Text(
+                  "Slot Details (Slot ${slot['slot_number']})",
+                  style: GoogleFonts.poppins(color: primaryText),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Phone: ${booking['phone']}',
+                    style: GoogleFonts.poppins(color: secondaryText)),
+                Text('Vehicle Number: ${booking['number_plate']}',
+                    style: GoogleFonts.poppins(color: secondaryText)),
+                Text(
+                    'Entry Time: ${DateFormat('MMM dd, hh:mm a').format(entryTime)}',
+                    style: GoogleFonts.poppins(color: secondaryText)),
+                if (calculatedAmount != null) ...[
+                  const Divider(color: hintText, height: 20),
+                  Text('Calculated Amount (Seconds): ₹$calculatedAmount',
+                      style: GoogleFonts.poppins(
+                          color: primaryText, fontWeight: FontWeight.bold)),
+                ]
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  // Simple calculation logic for demo (1 rupee per second)
+                  exitTime = DateTime.now();
+                  int secondsDifference =
+                      exitTime.difference(entryTime).inSeconds;
+                  setStateDialog(() {
+                    calculatedAmount = secondsDifference;
+                  });
+                },
+                child: Text('Calculate Now',
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold, color: primaryText)),
+              ),
+              if (calculatedAmount != null)
+                TextButton(
+                  onPressed: () {
+                    // Pass the whole booking object and calculated amount
+                    _onPayButtonPressed(booking, calculatedAmount, exitTime);
+                    // Close dialog to allow payment gateway to open
+                    Navigator.pop(context);
+                  },
+                  child: Text('Pay with Razorpay',
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold, color: primaryText)),
+                ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Close',
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold, color: primaryText)),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      print('Error fetching active booking details: $e');
+      _showErrorDialog('Error fetching slot details: $e');
+    }
+  }
+  // --- END UPDATED SLOT DETAIL FETCH ---
+
+  // --- UPDATED MANUAL BOOKING ---
   void _bookSlot(dynamic slot) {
+    if (_parkingId == null) return;
+
     showDialog(
       context: context,
       builder: (context) {
         final vehicleNumberController = TextEditingController();
         return AlertDialog(
-          backgroundColor: cardSurface, // New Color
+          backgroundColor: cardSurface,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
-              const Icon(Icons.directions_car, color: markerColor), // New Color
+              const Icon(Icons.directions_car, color: markerColor),
               const SizedBox(width: 8),
-              Text("Book Slot",
-                  style: GoogleFonts.poppins(color: primaryText)), // New Style
+              Text("Book Slot ${slot['slot_number']}",
+                  style: GoogleFonts.poppins(color: primaryText)),
             ],
           ),
           content: TextField(
             controller: vehicleNumberController,
-            style: GoogleFonts.poppins(color: primaryText), // New Style
+            style: GoogleFonts.poppins(color: primaryText),
             decoration: InputDecoration(
               labelText: _vehicleType == 'car'
                   ? 'Car Number Plate'
                   : 'Bike Number Plate',
-              labelStyle: GoogleFonts.poppins(color: hintText), // New Style
+              labelStyle: GoogleFonts.poppins(color: hintText),
               border: OutlineInputBorder(
-                // New Style
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
               enabledBorder: OutlineInputBorder(
-                // New Style
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
               focusedBorder: OutlineInputBorder(
-                // New Style
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
@@ -382,9 +418,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   _vehicleType == 'car'
                       ? Icons.directions_car
                       : Icons.motorcycle,
-                  color: hintText), // New Color
+                  color: hintText),
               filled: true,
-              fillColor: infoItemBg, // New Color
+              fillColor: infoItemBg,
             ),
           ),
           actions: [
@@ -396,76 +432,75 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
                 try {
                   final response = await http.post(
-                    Uri.parse('https://$apiHost/api/owner/bookings'),
+                    Uri.parse('$apiScheme://$apiHost/api/owner/bookings'),
                     headers: {'Content-Type': 'application/json'},
                     body: jsonEncode({
                       'parking_id': _parkingId,
-                      'slot_id': slot['_id'],
+                      // --- CRITICAL CHANGE: Use slot_number ---
+                      'slot_number': slot['slot_number'],
+                      // ----------------------------------------
                       'vehicle_type': _vehicleType,
-                      'number_plate': vehicleNumberController.text,
+                      'number_plate':
+                          vehicleNumberController.text.toUpperCase(),
                       'entry_time': DateTime.now().toIso8601String(),
-                      'phone': widget.phone,
+                      'phone': widget.phone, // Owner's phone as default phone
                     }),
                   );
 
                   if (response.statusCode == 200) {
                     if (mounted) {
                       Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => SuccessScreen(
-                            receipt: {
-                              'slot_number': slot['slot_number'],
-                              'vehicle_number': vehicleNumberController.text,
-                              'entry_time': DateTime.now().toIso8601String(),
-                            },
-                          ),
-                        ),
-                      ).then((_) => _fetchSlots());
+                      // Navigate to a temporary success screen (Owner view)
+                      _showErrorDialog("Manual Booking Successful!");
+                      _fetchSlots(); // Refresh slot status
                     }
                   } else {
-                    _showErrorDialog('Failed to book slot: ${response.body}');
+                    _showErrorDialog(
+                        'Failed to book slot: ${jsonDecode(response.body)['message'] ?? response.body}');
                   }
                 } catch (e) {
                   print('Error booking slot: $e');
                   _showErrorDialog('Error booking slot: $e');
                 }
               },
-              child: Text('Book',
+              child: Text('Book Now',
                   style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      color: primaryText)), // New Style
+                      fontWeight: FontWeight.bold, color: primaryText)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Close',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold, color: primaryText)),
             ),
           ],
         );
       },
     );
   }
+  // --- END UPDATED MANUAL BOOKING ---
 
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: cardSurface, // New Color
+        backgroundColor: cardSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(Icons.error_outline, color: errorRed), // New Color
+            const Icon(Icons.error_outline, color: errorRed),
             const SizedBox(width: 8),
-            Text("Error",
-                style: GoogleFonts.poppins(color: primaryText)), // New Style
+            Text("Error", style: GoogleFonts.poppins(color: primaryText)),
           ],
         ),
-        content: Text(message,
-            style: GoogleFonts.poppins(color: secondaryText)), // New Style
+        content:
+            Text(message, style: GoogleFonts.poppins(color: secondaryText)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text("OK",
                 style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.bold,
-                    color: primaryText)), // New Style
+                    fontWeight: FontWeight.bold, color: primaryText)),
           ),
         ],
       ),
@@ -475,18 +510,18 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: appBackground, // New Color
+      backgroundColor: appBackground,
       appBar: AppBar(
         title: Text(
           widget.parkingAreaName,
-          style: GoogleFonts.poppins(color: primaryText), // New Style
+          style: GoogleFonts.poppins(color: primaryText),
         ),
         elevation: 0,
-        backgroundColor: appBarColor, // New Color
+        backgroundColor: appBarColor,
         iconTheme: IconThemeData(color: primaryText), // Make back button white
         actions: [
           IconButton(
-            icon: const Icon(Icons.person, color: primaryText), // New Color
+            icon: const Icon(Icons.person, color: primaryText),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -502,7 +537,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
-                color: appBarColor, // New Color
+                color: appBarColor,
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(30),
                   bottomRight: Radius.circular(30),
@@ -514,7 +549,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     widget.parkingAreaName,
                     style: GoogleFonts.poppins(
-                      // New Style
                       color: primaryText,
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
@@ -524,7 +558,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     "Manage your parking slots",
                     style: GoogleFonts.poppins(
-                      // New Style
                       color: secondaryText,
                       fontSize: 14,
                     ),
@@ -533,13 +566,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: [
                       Expanded(
-                        // RESPONSIVE FIX
                         child: _buildSlotCount(Icons.directions_car, "Cars",
                             _availableCarSlots, _bookedCarSlots),
                       ),
-                      const SizedBox(width: 16), // RESPONSIVE FIX
+                      const SizedBox(width: 16),
                       Expanded(
-                        // RESPONSIVE FIX
                         child: _buildSlotCount(Icons.motorcycle, "Bikes",
                             _availableBikeSlots, _bookedBikeSlots),
                       ),
@@ -556,13 +587,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   _buildSectionTitle("Vehicle Type"),
                   const SizedBox(height: 16),
                   Container(
-                    // Removed padding, handled by Dropdown decoration
                     decoration: BoxDecoration(
-                      color: cardSurface, // New Color
+                      color: cardSurface,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          // New Shadow
                           color: shadow,
                           blurRadius: 10,
                           offset: const Offset(0, 4),
@@ -571,11 +600,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: DropdownButtonFormField<String>(
                       decoration: InputDecoration(
-                        // New Style
                         labelText: "Select Vehicle Type",
                         labelStyle: GoogleFonts.poppins(color: hintText),
                         contentPadding: const EdgeInsets.symmetric(
-                            vertical: 16, horizontal: 0), // Adjust padding
+                            vertical: 16, horizontal: 0),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -591,30 +619,28 @@ class _HomeScreenState extends State<HomeScreen> {
                         prefixIcon:
                             const Icon(Icons.directions_car, color: hintText),
                         filled: true,
-                        fillColor: infoItemBg, // New Color
+                        fillColor: infoItemBg,
                       ),
-                      style:
-                          GoogleFonts.poppins(color: primaryText), // New Style
+                      style: GoogleFonts.poppins(color: primaryText),
                       value: _vehicleType,
                       items: [
                         DropdownMenuItem(
                             value: 'car',
                             child: Text('Car',
-                                style: GoogleFonts.poppins(
-                                    color: primaryText))), // New Style
+                                style:
+                                    GoogleFonts.poppins(color: primaryText))),
                         DropdownMenuItem(
                             value: 'bike',
                             child: Text('Bike',
-                                style: GoogleFonts.poppins(
-                                    color: primaryText))), // New Style
+                                style:
+                                    GoogleFonts.poppins(color: primaryText))),
                       ],
                       onChanged: (value) {
                         setState(() => _vehicleType = value!);
                         _fetchSlots();
                       },
-                      dropdownColor: cardSurface, // New Color
-                      icon: const Icon(Icons.arrow_drop_down,
-                          color: hintText), // New Color
+                      dropdownColor: cardSurface,
+                      icon: const Icon(Icons.arrow_drop_down, color: hintText),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -623,11 +649,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: cardSurface, // New Color
+                      color: cardSurface,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          // New Shadow
                           color: shadow,
                           blurRadius: 10,
                           offset: const Offset(0, 4),
@@ -638,21 +663,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
-                          mainAxisAlignment:
-                              MainAxisAlignment.start, // Adjust alignment
+                          mainAxisAlignment: MainAxisAlignment.start,
                           children: [
-                            _buildLegendItem(const Color(0xFF4CAF50),
-                                "Available"), // Fixed Legend
-                            const SizedBox(width: 24), // Add spacing
                             _buildLegendItem(
-                                errorRed, "Booked"), // Fixed Legend
+                                const Color(0xFF4CAF50), "Available"),
+                            const SizedBox(width: 24),
+                            _buildLegendItem(errorRed, "Booked"),
                           ],
                         ),
                         const SizedBox(height: 20),
                         _isLoading
                             ? const Center(
                                 child: CircularProgressIndicator(
-                                color: markerColor, // New Color
+                                color: markerColor,
                               ))
                             : _slots.isEmpty
                                 ? Center(
@@ -660,13 +683,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                     "No slots available. Update parking area in Profile.",
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.poppins(
-                                        color: secondaryText), // New Style
+                                        color: secondaryText),
                                   ))
                                 : Wrap(
                                     spacing: 10.0,
                                     runSpacing: 10.0,
                                     children: _slots.map((slot) {
-                                      final slotId = slot['_id'];
                                       final slotNumber = slot['slot_number'];
                                       final isBooked =
                                           slot['is_booked'] == true;
@@ -682,7 +704,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           height: 65,
                                           decoration: BoxDecoration(
                                             color: isBooked
-                                                ? errorRed // New Color
+                                                ? errorRed
                                                 : const Color(0xFF4CAF50),
                                             borderRadius:
                                                 BorderRadius.circular(12),
@@ -691,8 +713,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                     BoxShadow(
                                                       color: const Color(
                                                               0xFF4CAF50)
-                                                          .withOpacity(
-                                                              0.3), // New Shadow
+                                                          .withOpacity(0.3),
                                                       blurRadius: 8,
                                                       offset:
                                                           const Offset(0, 2),
@@ -704,7 +725,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                             child: Text(
                                               "$slotNumber",
                                               style: GoogleFonts.poppins(
-                                                // New Style
                                                 color: primaryText,
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 16,
@@ -734,7 +754,7 @@ class _HomeScreenState extends State<HomeScreen> {
           width: 4,
           height: 20,
           decoration: BoxDecoration(
-            color: markerColor, // New Color
+            color: markerColor,
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -742,7 +762,6 @@ class _HomeScreenState extends State<HomeScreen> {
         Text(
           title,
           style: GoogleFonts.poppins(
-            // New Style
             fontSize: 18,
             fontWeight: FontWeight.bold,
             color: primaryText,
@@ -766,8 +785,7 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(width: 6),
         Text(
           label,
-          style: GoogleFonts.poppins(
-              fontSize: 12, color: secondaryText), // New Style
+          style: GoogleFonts.poppins(fontSize: 12, color: secondaryText),
         ),
       ],
     );
@@ -778,39 +796,33 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: cardSurface, // New Color
+        color: cardSurface,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: primaryText), // New Color
+          Icon(icon, size: 20, color: primaryText),
           const SizedBox(width: 8),
           Expanded(
-            // RESPONSIVE FIX
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   "$available / ${available + booked}",
                   style: GoogleFonts.poppins(
-                    // New Style
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: primaryText,
                   ),
-                  maxLines: 1, // Prevent number from wrapping
-                  overflow:
-                      TextOverflow.ellipsis, // Add ellipsis if it's too long
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   "$label (Avail/Total)",
-                  style: GoogleFonts.poppins(
-                      // New Style
-                      fontSize: 12,
-                      color: secondaryText),
-                  maxLines: 2, // Allow label to wrap
-                  overflow:
-                      TextOverflow.ellipsis, // Add ellipsis if it's too long
+                  style:
+                      GoogleFonts.poppins(fontSize: 12, color: secondaryText),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
