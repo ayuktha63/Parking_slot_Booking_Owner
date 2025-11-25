@@ -44,7 +44,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Razorpay? _razorpay;
   String _vehicleType = 'car';
   List<dynamic> _slots = [];
-  String? _parkingId;
+  int? _parkingId;
+
   bool _isLoading = true;
 
   int _totalCarSlots = 0;
@@ -105,7 +106,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      final parkingId = parkingArea['_id'];
+      final parkingId = parkingArea['id'];
 
       // Fetch slots for the current vehicle type
       final slotsResponse = await http.get(
@@ -256,7 +257,7 @@ class _HomeScreenState extends State<HomeScreen> {
       dynamic booking, int? calculatedAmount, DateTime exitTime) {
     // 1. Prepare completion data and store it in state
     _pendingCompletionData = {
-      'booking_id': booking['_id'], // Active Booking ID
+      'booking_id': booking['id'],
       'parking_id': booking['parking_id'],
       'slot_number': booking['slot_number'],
       'vehicle_type': booking['vehicle_type'],
