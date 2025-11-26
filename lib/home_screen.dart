@@ -97,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (_parkingId != null) {
         socket!.emit("join_parking", {
           "parking_id": _parkingId,
-          "vehicle_type": _vehicleType,
+          "vehicle_type": _vehicleType.toLowerCase(), // ✅ IMPORTANT
         });
       }
     });
@@ -109,7 +109,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (_parkingId == data["parking_id"] &&
           _vehicleType == data["vehicle_type"]) {
-        _fetchSlots(); // ✅ real-time refresh
+        setState(() {
+          _slots = _slots.map((slot) {
+            if (slot['slot_number'] == data['slot_number'] &&
+                slot['vehicle_type'] == data['vehicle_type']) {
+              return {
+                ...slot,
+                "status": data['status'], // ✅ NEW field instead of is_booked
+              };
+            }
+            return slot;
+          }).toList();
+        });
       }
     });
 
@@ -170,19 +181,23 @@ class _HomeScreenState extends State<HomeScreen> {
         if (socket != null) {
           socket!.emit("join_parking", {
             "parking_id": parkingId,
-            "vehicle_type": _vehicleType,
+            "vehicle_type": _vehicleType.toLowerCase(), // ✅ FIX
           });
         }
 
         _isLoading = false;
 
         _totalCarSlots = parkingArea['total_car_slots'] ?? 0;
-        _availableCarSlots = allCarSlots.where((s) => !s['is_booked']).length;
-        _bookedCarSlots = _totalCarSlots - _availableCarSlots;
+        _availableCarSlots =
+            allCarSlots.where((s) => s['status'] == "available").length;
+        _bookedCarSlots =
+            allCarSlots.where((s) => s['status'] == "booked").length;
 
         _totalBikeSlots = parkingArea['total_bike_slots'] ?? 0;
-        _availableBikeSlots = allBikeSlots.where((s) => !s['is_booked']).length;
-        _bookedBikeSlots = _totalBikeSlots - _availableBikeSlots;
+        _availableBikeSlots =
+            allBikeSlots.where((s) => s['status'] == "available").length;
+        _bookedBikeSlots =
+            allBikeSlots.where((s) => s['status'] == "booked").length;
       });
     } catch (e) {
       print('Error fetching slots: $e');
@@ -423,9 +438,35 @@ class _HomeScreenState extends State<HomeScreen> {
   // --- END UPDATED SLOT DETAIL FETCH ---
 
   // --- UPDATED MANUAL BOOKING ---
-  void _bookSlot(dynamic slot) {
+// --- UPDATED MANUAL BOOKING WITH HOLD FIRST ---
+  void _bookSlot(dynamic slot) async {
     if (_parkingId == null) return;
 
+    // ✅ 1. Create HOLD instantly when owner taps slot
+    try {
+      final holdResponse = await http.post(
+        Uri.parse('$apiScheme://$apiHost/api/holds'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'parking_id': _parkingId,
+          'slot_number': slot['slot_number'],
+          'vehicle_type': _vehicleType,
+          'phone': widget.phone, // optional
+        }),
+      );
+
+      if (holdResponse.statusCode != 200) {
+        final msg = jsonDecode(holdResponse.body)['message'] ?? "Hold failed";
+        _showErrorDialog(msg);
+        return;
+      }
+    } catch (e) {
+      print("Hold error: $e");
+      _showErrorDialog("Unable to hold slot. Try again.");
+      return;
+    }
+
+    // ✅ 2. Continue with Number Plate Popup
     showDialog(
       context: context,
       builder: (context) {
@@ -454,19 +495,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              prefixIcon: Icon(
-                  _vehicleType == 'car'
-                      ? Icons.directions_car
-                      : Icons.motorcycle,
-                  color: hintText),
               filled: true,
               fillColor: infoItemBg,
             ),
@@ -478,33 +506,31 @@ class _HomeScreenState extends State<HomeScreen> {
                   _showErrorDialog('Vehicle number plate is required.');
                   return;
                 }
+
                 try {
                   final response = await http.post(
                     Uri.parse('$apiScheme://$apiHost/api/owner/bookings'),
                     headers: {'Content-Type': 'application/json'},
                     body: jsonEncode({
                       'parking_id': _parkingId,
-                      // --- CRITICAL CHANGE: Use slot_number ---
                       'slot_number': slot['slot_number'],
-                      // ----------------------------------------
                       'vehicle_type': _vehicleType,
                       'number_plate':
                           vehicleNumberController.text.toUpperCase(),
                       'entry_time': DateTime.now().toIso8601String(),
-                      'phone': widget.phone, // Owner's phone as default phone
+                      'phone': widget.phone,
                     }),
                   );
 
                   if (response.statusCode == 200) {
                     if (mounted) {
                       Navigator.pop(context);
-                      // Navigate to a temporary success screen (Owner view)
                       _showErrorDialog("Manual Booking Successful!");
                       _fetchSlots(); // Refresh slot status
                     }
                   } else {
-                    _showErrorDialog(
-                        'Failed to book slot: ${jsonDecode(response.body)['message'] ?? response.body}');
+                    _showErrorDialog(jsonDecode(response.body)['message'] ??
+                        "Booking failed");
                   }
                 } catch (e) {
                   print('Error booking slot: $e');
@@ -526,6 +552,7 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
   }
+
   // --- END UPDATED MANUAL BOOKING ---
 
   void _showErrorDialog(String message) {
@@ -689,7 +716,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (_parkingId != null && socket != null) {
                           socket!.emit("join_parking", {
                             "parking_id": _parkingId,
-                            "vehicle_type": value,
+                            "vehicle_type": value?.toLowerCase(), // ✅ FIX
                           });
                         }
 
@@ -723,7 +750,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             _buildLegendItem(
                                 const Color(0xFF4CAF50), "Available"),
-                            const SizedBox(width: 24),
+                            _buildLegendItem(Colors.orangeAccent, "Held"),
                             _buildLegendItem(errorRed, "Booked"),
                           ],
                         ),
@@ -746,13 +773,22 @@ class _HomeScreenState extends State<HomeScreen> {
                                     runSpacing: 10.0,
                                     children: _slots.map((slot) {
                                       final slotNumber = slot['slot_number'];
-                                      final isBooked =
-                                          slot['is_booked'] == true;
+                                      final String status =
+                                          slot['status'] ?? "available";
+                                      final bool isBooked = status == "booked";
+                                      final bool isHeld = status == "held";
 
                                       return GestureDetector(
-                                        onTap: () => isBooked
-                                            ? _showBookedDetails(slot)
-                                            : _bookSlot(slot),
+                                        onTap: () {
+                                          if (isBooked) {
+                                            _showBookedDetails(slot);
+                                          } else if (isHeld) {
+                                            _showErrorDialog(
+                                                "This slot is temporarily held by a user.");
+                                          } else {
+                                            _bookSlot(slot);
+                                          }
+                                        },
                                         child: AnimatedContainer(
                                           duration:
                                               const Duration(milliseconds: 200),
@@ -760,8 +796,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                           height: 65,
                                           decoration: BoxDecoration(
                                             color: isBooked
-                                                ? errorRed
-                                                : const Color(0xFF4CAF50),
+                                                ? errorRed // 🔴 booked
+                                                : isHeld
+                                                    ? Colors
+                                                        .orangeAccent // 🟡 held
+                                                    : const Color(
+                                                        0xFF4CAF50), // ✅ available
+
                                             borderRadius:
                                                 BorderRadius.circular(12),
                                             boxShadow: !isBooked
