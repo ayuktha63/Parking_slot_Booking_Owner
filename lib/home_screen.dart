@@ -7,7 +7,8 @@ import 'package:flutter/foundation.dart' show kIsWeb; // Import for web check
 import 'profile_screen.dart';
 import 'success_screen.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
-import 'package:intl/intl.dart'; // Import for date formatting
+import 'package:intl/intl.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO; // ✅ NEW
 
 // --- DESIGN SYSTEM COLORS (Dark Mode) ---
 const Color appBackground = Color(0xFF1C1C1E);
@@ -42,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String apiScheme = 'https';
 
   Razorpay? _razorpay;
+  IO.Socket? socket; // ✅ NEW
   String _vehicleType = 'car';
   List<dynamic> _slots = [];
   int? _parkingId;
@@ -70,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     _fetchSlots();
-
+    _initSocket(); // ✅ NEW
     // Initialize Razorpay only on Android and iOS.
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
       _razorpay = Razorpay();
@@ -80,8 +82,44 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _initSocket() {
+    socket = IO.io(
+      '$apiScheme://$apiHost',
+      IO.OptionBuilder()
+          .setTransports(['websocket'])
+          .enableAutoConnect()
+          .build(),
+    );
+
+    socket!.onConnect((_) {
+      print("✅ SOCKET CONNECTED");
+
+      if (_parkingId != null) {
+        socket!.emit("join_parking", {
+          "parking_id": _parkingId,
+          "vehicle_type": _vehicleType,
+        });
+      }
+    });
+
+    socket!.on("slot_update", (data) {
+      print("📡 SLOT UPDATE: $data");
+
+      if (!mounted) return;
+
+      if (_parkingId == data["parking_id"] &&
+          _vehicleType == data["vehicle_type"]) {
+        _fetchSlots(); // ✅ real-time refresh
+      }
+    });
+
+    socket!.onDisconnect((_) => print("❌ SOCKET DISCONNECTED"));
+  }
+
   @override
   void dispose() {
+    socket?.disconnect(); // ✅ NEW
+    socket?.destroy(); // ✅ NEW
     _razorpay?.clear();
     super.dispose();
   }
@@ -127,6 +165,15 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _slots = slots;
         _parkingId = parkingId;
+
+// ✅ Join socket room
+        if (socket != null) {
+          socket!.emit("join_parking", {
+            "parking_id": parkingId,
+            "vehicle_type": _vehicleType,
+          });
+        }
+
         _isLoading = false;
 
         _totalCarSlots = parkingArea['total_car_slots'] ?? 0;
@@ -638,6 +685,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                       onChanged: (value) {
                         setState(() => _vehicleType = value!);
+
+                        if (_parkingId != null && socket != null) {
+                          socket!.emit("join_parking", {
+                            "parking_id": _parkingId,
+                            "vehicle_type": value,
+                          });
+                        }
+
                         _fetchSlots();
                       },
                       dropdownColor: cardSurface,
